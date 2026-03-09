@@ -1,0 +1,1 @@
+"""Embedded assessment collector package."""

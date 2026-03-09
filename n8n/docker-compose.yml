@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: embedded-assess-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/workflows:ro
+    networks:
+      - assess-net
+
+  collector:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: embedded-assess-collector
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - COLLECTOR_CONFIG=/app/config/config.yaml
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SSH_HOST=${SSH_HOST:-}
+      - SSH_PORT=${SSH_PORT:-22}
+      - SSH_USERNAME=${SSH_USERNAME:-root}
+      - SSH_AUTH=${SSH_AUTH:-key}
+      - SSH_KEY_PATH=${SSH_KEY_PATH:-/root/.ssh/id_ed25519}
+      - SSH_PASSWORD=${SSH_PASSWORD:-}
+      - SSH_TIMEOUT=${SSH_TIMEOUT:-10}
+      - SSH_CMD_TIMEOUT=${SSH_CMD_TIMEOUT:-30}
+    volumes:
+      - ../config:/app/config:ro
+      - ../output:/app/output
+      - collector_ssh:/root/.ssh
+    networks:
+      - assess-net
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
+  collector_ssh:
+
+networks:
+  assess-net:
+    driver: bridge
