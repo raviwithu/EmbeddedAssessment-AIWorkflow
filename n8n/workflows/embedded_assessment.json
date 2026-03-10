@@ -9,25 +9,35 @@
       },
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [250, 300],
       "id": "node-webhook"
     },
     {
       "parameters": {
         "conditions": {
-          "string": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.mode }}",
-              "operation": "equals",
-              "value2": "full"
+              "id": "cond-mode-full",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "full",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         }
       },
       "name": "Check Mode",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [500, 300],
       "id": "node-check-mode"
     },
@@ -50,17 +60,28 @@
     },
     {
       "parameters": {
+        "url": "http://collector:8000/collect/linux/service-map",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: { host: $json.host || $env.SSH_HOST, port: $json.port || Number($env.SSH_PORT) || 22, username: $json.username || $env.SSH_USERNAME || 'root', auth: $json.auth || $env.SSH_AUTH || 'key', key_path: $json.key_path || $env.SSH_KEY_PATH || '~/.ssh/id_ed25519', password: $json.password || $env.SSH_PASSWORD || '' } }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Service Map",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 200],
+      "id": "node-service-map"
+    },
+    {
+      "parameters": {
         "url": "http://collector:8000/assess",
         "method": "POST",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "target_name",
-              "value": "={{ $json.target_name || null }}"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target_name: $json.target_name || undefined }) }}",
         "options": {
           "timeout": 120000
         }
@@ -76,7 +97,7 @@
       "name": "Return Results",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1000, 300],
+      "position": [1250, 300],
       "id": "node-respond"
     }
   ],
@@ -111,6 +132,17 @@
       ]
     },
     "Full Orchestration": {
+      "main": [
+        [
+          {
+            "node": "Service Map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service Map": {
       "main": [
         [
           {

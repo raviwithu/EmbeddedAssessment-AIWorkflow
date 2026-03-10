@@ -9,21 +9,25 @@
       },
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [200, 300],
       "id": "node-forensic-webhook"
     },
     {
       "parameters": {
-        "values": {
-          "string": [
+        "assignments": {
+          "assignments": [
             {
+              "id": "assign-target",
               "name": "target_json",
-              "value": "={{ JSON.stringify({ host: $json.host || $env.SSH_HOST, port: $json.port || Number($env.SSH_PORT) || 22, username: $json.username || $env.SSH_USERNAME || 'root', auth: $json.auth || $env.SSH_AUTH || 'key', key_path: $json.key_path || $env.SSH_KEY_PATH || '~/.ssh/id_ed25519', password: $json.password || $env.SSH_PASSWORD || '' }) }}"
+              "value": "={{ JSON.stringify({ host: $json.host || $env.SSH_HOST, port: $json.port || Number($env.SSH_PORT) || 22, username: $json.username || $env.SSH_USERNAME || 'root', auth: $json.auth || $env.SSH_AUTH || 'key', key_path: $json.key_path || $env.SSH_KEY_PATH || '~/.ssh/id_ed25519', password: $json.password || $env.SSH_PASSWORD || '' }) }}",
+              "type": "string"
             },
             {
+              "id": "assign-output",
               "name": "output_dir",
-              "value": "={{ $json.output_dir || './output/baselines' }}"
+              "value": "={{ $json.output_dir || './output/baselines' }}",
+              "type": "string"
             }
           ]
         },
@@ -31,7 +35,7 @@
       },
       "name": "Build Target Config",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
+      "typeVersion": 3,
       "position": [420, 300],
       "id": "node-build-config"
     },
@@ -139,6 +143,23 @@
     },
     {
       "parameters": {
+        "url": "http://collector:8000/collect/linux/service-map",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json) }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Service Map",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1380, 400],
+      "id": "node-service-map"
+    },
+    {
+      "parameters": {
         "mode": "multiplex"
       },
       "name": "Merge Results",
@@ -240,6 +261,17 @@
       ]
     },
     "Hardware Interfaces": {
+      "main": [
+        [
+          {
+            "node": "Service Map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service Map": {
       "main": [
         [
           {
