@@ -17,6 +17,7 @@ from collector.linux.hardening_checks import run_hardening_checks
 from collector.linux.hardware_comm import collect_hardware_interfaces
 from collector.linux.process_inventory import collect_processes
 from collector.linux.service_port_inventory import collect_open_ports, collect_services
+from collector.linux.service_process_map import collect_service_process_map
 from collector.linux.system_info import collect_system_info
 from collector.models import (
     AssessmentResult,
@@ -27,6 +28,8 @@ from collector.models import (
     ProcessInfo,
     SecurityCollectResponse,
     ServiceInfo,
+    ServiceMapCollectResponse,
+    ServiceProcessMap,
     SystemCollectResponse,
     SystemInfo,
 )
@@ -144,6 +147,27 @@ def collect_hwcomms_domain(
     )
 
 
+def collect_service_map_domain(
+    transport: Transport,
+    host: str,
+) -> ServiceMapCollectResponse:
+    """Map running services to their processes and listening ports."""
+    errors: list[str] = []
+    mappings: list[ServiceProcessMap] = []
+
+    try:
+        mappings = collect_service_process_map(transport)
+    except TransportError as exc:
+        errors.append(f"service_process_map: {exc}")
+
+    return ServiceMapCollectResponse(
+        target_host=host,
+        timestamp=datetime.now(timezone.utc),
+        mappings=mappings,
+        errors=errors,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Full assessment (config-driven, used by legacy /assess endpoint)
 # ---------------------------------------------------------------------------
@@ -172,6 +196,10 @@ def run_linux_assessment(
                 len(result.services),
                 len(result.open_ports),
             )
+
+        if modules.service_process_map.enabled:
+            result.service_process_map = collect_service_process_map(transport)
+            logger.info("Mapped %d services to processes", len(result.service_process_map))
 
         if modules.hardening_checks.enabled:
             result.hardening = run_hardening_checks(transport)

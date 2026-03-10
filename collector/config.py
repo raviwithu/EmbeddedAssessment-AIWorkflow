@@ -32,6 +32,7 @@ class ModuleToggle(BaseModel):
 class ModulesConfig(BaseModel):
     process_inventory: ModuleToggle = Field(default_factory=ModuleToggle)
     service_port_inventory: ModuleToggle = Field(default_factory=ModuleToggle)
+    service_process_map: ModuleToggle = Field(default_factory=ModuleToggle)
     hardening_checks: ModuleToggle = Field(default_factory=ModuleToggle)
     hardware_comm: ModuleToggle = Field(default_factory=ModuleToggle)
 

@@ -51,6 +51,17 @@ class HardwareInterface(BaseModel):
     accessible: bool = False
 
 
+class ServiceProcessMap(BaseModel):
+    """A running systemd service mapped to its main process and ports."""
+
+    service_name: str
+    service_state: str  # active | inactive
+    enabled: bool = False
+    main_pid: int = 0
+    process: ProcessInfo | None = None
+    listening_ports: list[OpenPort] = Field(default_factory=list)
+
+
 class SystemInfo(BaseModel):
     hostname: str = ""
     kernel: str = ""
@@ -71,6 +82,7 @@ class AssessmentResult(BaseModel):
     open_ports: list[OpenPort] = Field(default_factory=list)
     hardening: list[HardeningCheck] = Field(default_factory=list)
     hardware_interfaces: list[HardwareInterface] = Field(default_factory=list)
+    service_process_map: list[ServiceProcessMap] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -181,6 +193,21 @@ class HwCommsCollectResponse(BaseModel):
     target_host: str
     timestamp: datetime
     hardware_interfaces: list[HardwareInterface] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class ServiceMapCollectRequest(BaseModel):
+    """Request body for POST /collect/linux/service-map."""
+
+    target: TargetConnectionRequest
+
+
+class ServiceMapCollectResponse(BaseModel):
+    """Response from POST /collect/linux/service-map."""
+
+    target_host: str
+    timestamp: datetime
+    mappings: list[ServiceProcessMap] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
 

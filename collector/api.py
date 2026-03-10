@@ -34,6 +34,7 @@ from collector.config import AppConfig, ConnectionConfig, load_config
 from collector.linux.runner import (
     collect_hwcomms_domain,
     collect_security_domain,
+    collect_service_map_domain,
     collect_system_domain,
     run_linux_assessment,
 )
@@ -46,6 +47,8 @@ from collector.models import (
     ReportRenderResponse,
     SecurityCollectRequest,
     SecurityCollectResponse,
+    ServiceMapCollectRequest,
+    ServiceMapCollectResponse,
     SystemCollectRequest,
     SystemCollectResponse,
     TargetConnectionRequest,
@@ -322,6 +325,31 @@ async def collect_linux_hwcomms(req: HwCommsCollectRequest) -> HwCommsCollectRes
     device enumeration — no bus interaction or intrusive probing.
     """
     return await asyncio.to_thread(_do_collect_hwcomms, req)
+
+
+# ---------------------------------------------------------------------------
+# POST /collect/linux/service-map
+# ---------------------------------------------------------------------------
+
+def _do_collect_service_map(req: ServiceMapCollectRequest) -> ServiceMapCollectResponse:
+    with _open_transport(req.target) as transport:
+        return collect_service_map_domain(transport, req.target.host)
+
+
+@app.post(
+    "/collect/linux/service-map",
+    response_model=ServiceMapCollectResponse,
+    summary="Map running services to their processes and ports",
+    tags=["collect"],
+)
+async def collect_linux_service_map(
+    req: ServiceMapCollectRequest,
+) -> ServiceMapCollectResponse:
+    """Map each systemd service to its main process (via MainPID) and any
+    listening ports.  Provides a unified view of which process belongs to
+    which service.
+    """
+    return await asyncio.to_thread(_do_collect_service_map, req)
 
 
 # ---------------------------------------------------------------------------

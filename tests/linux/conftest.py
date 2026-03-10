@@ -121,6 +121,30 @@ Bus 001 Device 002: ID 0403:6001 Future Technology Devices International, Ltd FT
 """
 
 
+# ---------------------------------------------------------------------------
+# systemctl show output (for service-process mapping)
+# ---------------------------------------------------------------------------
+
+SYSTEMCTL_SHOW_OUTPUT = """\
+Id=sshd.service
+MainPID=123
+
+Id=nginx.service
+MainPID=456
+
+Id=cron.service
+MainPID=500
+
+Id=bluetooth.service
+MainPID=0
+"""
+
+SYSTEMCTL_SHOW_EMPTY = """\
+Id=sshd.service
+MainPID=0
+"""
+
+
 @pytest.fixture
 def gnu_ps_output() -> str:
     return GNU_PS_OUTPUT
