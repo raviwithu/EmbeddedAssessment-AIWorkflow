@@ -99,3 +99,64 @@ class TestTransportRunSafe:
         with t:
             assert t.is_connected()
         assert not t.is_connected()
+
+
+# ---------------------------------------------------------------------------
+# H6: Timeout simulation tests
+# ---------------------------------------------------------------------------
+
+class TestTimeoutHandling:
+    def test_timed_out_command_result(self):
+        """Verify that timed_out flag makes result not ok."""
+        t = MockTransport()
+        t.connect()
+        t.register("slow_cmd", timed_out=True, exit_code=-1, error="Timed out")
+        result = t.run("slow_cmd")
+        assert result.timed_out is True
+        assert result.ok is False
+        assert result.exit_code == -1
+
+    def test_run_safe_handles_timeout(self):
+        """run_safe should return a result even for timeouts."""
+        t = MockTransport()
+        t.connect()
+        t.register("slow_cmd", timed_out=True, exit_code=-1, error="Timed out")
+        result = t.run_safe("slow_cmd")
+        assert result.timed_out is True
+        assert not result.ok
+
+
+# ---------------------------------------------------------------------------
+# H7: ConnectionFailed tests
+# ---------------------------------------------------------------------------
+
+class TestConnectionFailedHandling:
+    def test_connection_failed_exception(self):
+        """ConnectionFailed is a TransportError with descriptive message."""
+        exc = ConnectionFailed("Auth failed for root@10.0.0.1")
+        assert isinstance(exc, TransportError)
+        assert "Auth failed" in str(exc)
+
+    def test_transport_not_connected_raises(self):
+        """Calling run on disconnected SSHTransport raises ConnectionFailed."""
+        cfg = ConnectionConfig(host="10.0.0.1")
+        t = SSHTransport(cfg)
+        # Not connected — should raise
+        with pytest.raises(ConnectionFailed, match="Not connected"):
+            t.run("id")
+
+
+# ---------------------------------------------------------------------------
+# L5: Large output handling
+# ---------------------------------------------------------------------------
+
+class TestLargeOutput:
+    def test_large_stdout_handled(self):
+        """Transport should handle large command output without error."""
+        t = MockTransport()
+        t.connect()
+        large_output = "x" * 100_000 + "\n" + "y" * 100_000
+        t.register("big_cmd", stdout=large_output)
+        result = t.run("big_cmd")
+        assert len(result.stdout) == 200_001
+        assert result.ok

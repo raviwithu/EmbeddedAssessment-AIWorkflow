@@ -32,13 +32,13 @@ _BASELINE_COMMANDS: list[tuple[str, str]] = [
     ("os_release.txt", "cat /etc/os-release 2>/dev/null"),
     ("hostname.txt", "hostname"),
 
-    # System binary hashes
+    # System binary hashes (capped to prevent unbounded output)
     ("system_hashes.txt",
-     "find /usr/bin /usr/sbin /bin /sbin -type f -exec sha256sum {} \\; 2>/dev/null"),
+     "find /usr/bin /usr/sbin /bin /sbin -type f -exec sha256sum {} \\; 2>/dev/null | head -10000"),
 
     # Library hashes
     ("lib_hashes.txt",
-     "find /lib /usr/lib -maxdepth 2 -name '*.so*' -type f -exec sha256sum {} \\; 2>/dev/null"),
+     "find /lib /usr/lib -maxdepth 2 -name '*.so*' -type f -exec sha256sum {} \\; 2>/dev/null | head -10000"),
 
     # Running processes
     ("ps_full.txt", "ps auxwwf"),

@@ -14,19 +14,19 @@ services:
       - SSH_PORT=${SSH_PORT:-22}
       - SSH_USERNAME=${SSH_USERNAME:-root}
       - SSH_AUTH=${SSH_AUTH:-key}
-      - SSH_KEY_PATH=${SSH_KEY_PATH:-/root/.ssh/id_ed25519}
+      - SSH_KEY_PATH=${SSH_KEY_PATH:-/app/.ssh/id_ed25519}
       - SSH_PASSWORD=${SSH_PASSWORD:-}
       - SSH_TIMEOUT=${SSH_TIMEOUT:-10}
       - SSH_CMD_TIMEOUT=${SSH_CMD_TIMEOUT:-30}
     volumes:
       - ../config:/app/config:ro
       - ../output:/app/output
-      - collector_ssh:/root/.ssh
+      - collector_ssh:/app/.ssh:ro
     networks:
       - assess-net
 
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:1.76.1
     container_name: embedded-assess-n8n
     restart: unless-stopped
     ports:
@@ -52,6 +52,12 @@ services:
       - assess-net
     depends_on:
       - collector
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
 volumes:
   n8n_data:

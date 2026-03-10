@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from report.generator import render_html, render_markdown, save_reports
-from tests.conftest import make_assessment_result
+from report.generator import _md_escape, render_html, render_markdown, save_reports
+from tests.conftest import make_assessment_result, make_process_info
 
 
 class TestRenderHtml:
@@ -69,3 +69,46 @@ class TestSaveReports:
         paths = save_reports(result, out, ["html"])
         assert out.exists()
         assert len(paths) == 1
+
+
+# ---------------------------------------------------------------------------
+# Markdown escaping (H5)
+# ---------------------------------------------------------------------------
+
+class TestMdEscape:
+    def test_escapes_pipes(self):
+        assert _md_escape("foo|bar") == "foo\\|bar"
+
+    def test_escapes_newlines(self):
+        assert _md_escape("line1\nline2") == "line1 line2"
+
+    def test_escapes_link_injection(self):
+        """Brackets and parens must be escaped to prevent markdown link injection."""
+        malicious = "[evil](http://evil.com)"
+        escaped = _md_escape(malicious)
+        assert "[" not in escaped or "\\[" in escaped
+        assert "]" not in escaped or "\\]" in escaped
+        assert "(" not in escaped or "\\(" in escaped
+        assert ")" not in escaped or "\\)" in escaped
+
+    def test_combined(self):
+        result = _md_escape("a|b\n[c](d)")
+        assert "|" not in result or "\\|" in result
+        assert "\n" not in result
+
+
+class TestXssProtection:
+    def test_html_escapes_script_tags(self):
+        """HTML autoescape should prevent XSS via script tags."""
+        result = make_assessment_result(target_name="<script>alert('xss')</script>")
+        html = render_html(result)
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_markdown_escapes_pipe_in_data(self):
+        """Pipe chars in process commands should not break markdown tables."""
+        proc = make_process_info(command="cat /etc/passwd | grep root")
+        result = make_assessment_result(processes=[proc])
+        md = render_markdown(result)
+        # The pipe should be escaped so the table doesn't break
+        assert "\\|" in md

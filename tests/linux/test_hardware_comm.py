@@ -102,7 +102,7 @@ class TestFindUsb:
         interfaces = _find_usb(mock_transport)
         assert len(interfaces) == 2
         assert all(i.type == "usb" for i in interfaces)
-        assert all(i.accessible for i in interfaces)
+        assert all(not i.accessible for i in interfaces)  # lsusb enumerates but doesn't imply access
         assert "root hub" in interfaces[0].description
 
     def test_lsusb_failure(self, mock_transport: MockTransport):

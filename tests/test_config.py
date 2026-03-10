@@ -32,6 +32,18 @@ class TestConnectionConfig:
         assert c.port == 2222
         assert c.method == "adb"
 
+    def test_port_too_low_raises(self):
+        with pytest.raises(ValueError, match="Port must be 1-65535"):
+            ConnectionConfig(port=0)
+
+    def test_port_too_high_raises(self):
+        with pytest.raises(ValueError, match="Port must be 1-65535"):
+            ConnectionConfig(port=70000)
+
+    def test_valid_port_boundaries(self):
+        assert ConnectionConfig(port=1).port == 1
+        assert ConnectionConfig(port=65535).port == 65535
+
 
 class TestTargetConfig:
     def test_defaults(self):

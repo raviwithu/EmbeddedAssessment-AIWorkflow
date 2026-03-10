@@ -119,6 +119,12 @@ def collect_phase1(
         else:
             errors.append("Neither LiME nor /proc/kcore available for memory acquisition")
 
+    # Unload LiME module after acquisition to clean up
+    if method_used == "lime":
+        rmmod_result = transport.run("sudo rmmod lime 2>/dev/null", timeout=30)
+        if rmmod_result.exit_code != 0:
+            logger.warning("Could not unload LiME module: %s", rmmod_result.stderr)
+
     # Step 1.2 — Verify acquisition integrity (if dump exists)
     if method_used == "lime":
         q_dump = shlex.quote(dump_file)

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from collector.common.sanitize import sanitize_hostname as _sanitize
-from collector.linux.forensic_storage import save_snapshot, load_manifest
+from collector.linux.forensic_storage import _sanitize_filename, save_snapshot, load_manifest
 from collector.models import BaselineSnapshot, ForensicArtifact, Phase0Snapshot
 
 
@@ -101,3 +101,62 @@ class TestSanitize:
     def test_empty_becomes_unknown(self):
         assert _sanitize("") == "unknown"
         assert _sanitize("...") == "unknown"
+
+
+class TestSanitizeFilename:
+    def test_strips_path_separators(self):
+        assert _sanitize_filename("../../etc/passwd") == "etc_passwd"
+
+    def test_strips_null_bytes(self):
+        assert _sanitize_filename("file\x00name.txt") == "filename.txt"
+
+    def test_safe_names_pass_through(self):
+        assert _sanitize_filename("uname.txt") == "uname.txt"
+        assert _sanitize_filename("ps_full.txt") == "ps_full.txt"
+
+    def test_empty_becomes_artifact(self):
+        assert _sanitize_filename("") == "artifact"
+        assert _sanitize_filename("...") == "artifact"
+
+
+class TestCorruptedManifest:
+    def test_load_manifest_with_corrupted_json(self, tmp_path: Path):
+        (tmp_path / "manifest.json").write_text("NOT VALID JSON {{{{")
+        result = load_manifest(tmp_path)
+        assert result == {}
+
+    def test_save_overwrites_corrupted_manifest(self, tmp_path: Path):
+        phase_dir = tmp_path / "host" / "baseline"
+        phase_dir.mkdir(parents=True)
+        (phase_dir / "manifest.json").write_text("CORRUPTED")
+
+        snapshot = BaselineSnapshot(
+            hostname="host",
+            artifacts=[ForensicArtifact(filename="a.txt", content="data", command="cmd")],
+        )
+        # save_snapshot prepends _sanitize(hostname), so output_dir=tmp_path
+        save_snapshot(snapshot, tmp_path, "baseline")
+        manifest = load_manifest(phase_dir)
+        assert manifest["hostname"] == "host"
+        assert len(manifest["runs"]) == 1
+
+
+class TestArtifactFilenameSanitization:
+    def test_path_traversal_prevented(self, tmp_path: Path):
+        snapshot = BaselineSnapshot(
+            hostname="safe-host",
+            artifacts=[
+                ForensicArtifact(
+                    filename="../../etc/passwd",
+                    content="should not escape",
+                    command="test",
+                ),
+            ],
+        )
+        result_dir = save_snapshot(snapshot, tmp_path, "baseline")
+        # File should be stored with sanitized name, not escape the directory
+        assert not (tmp_path / "etc").exists()
+        files = list(result_dir.glob("*"))
+        filenames = [f.name for f in files]
+        assert "manifest.json" in filenames
+        assert any(f.name != "manifest.json" for f in files)

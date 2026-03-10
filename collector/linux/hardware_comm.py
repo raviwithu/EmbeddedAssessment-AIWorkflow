@@ -91,7 +91,7 @@ def _find_usb(t: Transport) -> list[HardwareInterface]:
             type="usb",
             device_path="",
             description=line.strip(),
-            accessible=True,  # lsusb only lists devices that are accessible
+            accessible=False,  # lsusb enumerates devices but does not imply read/write access
         )
         for line in r.stdout.strip().splitlines()
         if line.strip()

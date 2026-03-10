@@ -21,11 +21,11 @@ python -m collector.orchestrator --host 10.0.0.5 --output ./my-output
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
+
+from jinja2 import TemplateError
 
 from collector.common.sanitize import sanitize_hostname as _sanitize_hostname
 from collector.common.transport import ConnectionFailed, Transport, TransportError, create_transport
@@ -110,43 +110,35 @@ def run_full_assessment(
     result = AssessmentResult(target_name=hostname, platform="linux")
 
     # System info
-    _run_collector(
-        summary, "system_info",
-        lambda: setattr(result, "system_info", collect_system_info(transport)),
-    )
+    def _do_system_info():
+        result.system_info = collect_system_info(transport)
+    _run_collector(summary, "system_info", _do_system_info)
 
     # Processes
-    _run_collector(
-        summary, "process_inventory",
-        lambda: setattr(result, "processes", collect_processes(transport)),
-    )
+    def _do_processes():
+        result.processes = collect_processes(transport)
+    _run_collector(summary, "process_inventory", _do_processes)
 
     # Services
-    _run_collector(
-        summary, "service_port_inventory",
-        lambda: (
-            setattr(result, "services", collect_services(transport)),
-            setattr(result, "open_ports", collect_open_ports(transport)),
-        ),
-    )
+    def _do_services():
+        result.services = collect_services(transport)
+        result.open_ports = collect_open_ports(transport)
+    _run_collector(summary, "service_port_inventory", _do_services)
 
     # Service-process map
-    _run_collector(
-        summary, "service_process_map",
-        lambda: setattr(result, "service_process_map", collect_service_process_map(transport)),
-    )
+    def _do_service_map():
+        result.service_process_map = collect_service_process_map(transport)
+    _run_collector(summary, "service_process_map", _do_service_map)
 
     # Hardening checks
-    _run_collector(
-        summary, "hardening_checks",
-        lambda: setattr(result, "hardening", run_hardening_checks(transport)),
-    )
+    def _do_hardening():
+        result.hardening = run_hardening_checks(transport)
+    _run_collector(summary, "hardening_checks", _do_hardening)
 
     # Hardware interfaces
-    _run_collector(
-        summary, "hardware_comm",
-        lambda: setattr(result, "hardware_interfaces", collect_hardware_interfaces(transport)),
-    )
+    def _do_hardware():
+        result.hardware_interfaces = collect_hardware_interfaces(transport)
+    _run_collector(summary, "hardware_comm", _do_hardware)
 
     # Save assessment result as JSON
     assessment_path = host_dir / "assessment_result.json"
@@ -160,7 +152,7 @@ def run_full_assessment(
         md_path = host_dir / "report.md"
         md_path.write_text(render_markdown(result))
         logger.info("Saved reports to %s", host_dir)
-    except Exception as exc:
+    except (OSError, TemplateError) as exc:
         summary["errors"].append(f"report_generation: {exc}")
         logger.error("Report generation failed: %s", exc)
 

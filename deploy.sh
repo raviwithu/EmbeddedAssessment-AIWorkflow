@@ -61,8 +61,8 @@ main() {
     echo ""
     info "Waiting for services to become healthy..."
 
-    # Poll health endpoints instead of a fixed sleep
-    MAX_WAIT=30
+    # Poll health endpoints (configurable via DEPLOY_HEALTH_TIMEOUT env var)
+    MAX_WAIT="${DEPLOY_HEALTH_TIMEOUT:-60}"
     INTERVAL=2
 
     # Health check — collector

@@ -83,9 +83,20 @@ except FileNotFoundError:
     logger.warning("Config file %s not found — /assess and /targets will be unavailable", _config_path)
     _app_config = AppConfig()
 
+_config_loaded = bool(_app_config.targets)
+
+def _get_version() -> str:
+    """Read version from package metadata or fall back to default."""
+    try:
+        from importlib.metadata import version
+        return version("embedded-assessment")
+    except Exception:
+        return "0.3.0"
+
+
 app = FastAPI(
     title="Embedded Assessment Collector",
-    version="0.3.0",
+    version=_get_version(),
     description="REST API for embedded Linux target assessment — "
     "system inventory, security hardening, and hardware enumeration.",
 )
@@ -181,6 +192,11 @@ class TargetSummary(BaseModel):
 )
 async def list_targets() -> list[TargetSummary]:
     """Return the list of targets defined in the config file."""
+    if not _config_loaded:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No config loaded — place a config file at {_config_path}",
+        )
     return [
         TargetSummary(
             name=t.name,

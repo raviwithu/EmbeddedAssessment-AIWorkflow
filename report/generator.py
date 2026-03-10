@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -10,7 +11,8 @@ from collector.models import AssessmentResult
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
-# Cache Environment instances — one per autoescape mode.
+# Thread-safe lazy initialization for Jinja2 environments.
+_lock = threading.Lock()
 _html_env: Environment | None = None
 _md_env: Environment | None = None
 
@@ -18,27 +20,42 @@ _md_env: Environment | None = None
 def _get_html_env() -> Environment:
     global _html_env
     if _html_env is None:
-        _html_env = Environment(
-            loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-            autoescape=True,
-        )
+        with _lock:
+            if _html_env is None:
+                _html_env = Environment(
+                    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+                    autoescape=True,
+                )
     return _html_env
 
 
 def _md_escape(value: object) -> str:
-    """Escape pipe characters and newlines so they don't break Markdown tables."""
+    """Escape characters that could break Markdown tables or inject links.
+
+    Escapes: pipes, newlines, brackets, and parentheses.
+    """
     s = str(value)
-    return s.replace("|", "\\|").replace("\n", " ")
+    return (
+        s.replace("|", "\\|")
+        .replace("\n", " ")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+    )
 
 
 def _get_md_env() -> Environment:
     global _md_env
     if _md_env is None:
-        _md_env = Environment(
-            loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-            autoescape=False,
-        )
-        _md_env.filters["md"] = _md_escape
+        with _lock:
+            if _md_env is None:
+                env = Environment(
+                    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+                    autoescape=False,
+                )
+                env.filters["md"] = _md_escape
+                _md_env = env
     return _md_env
 
 

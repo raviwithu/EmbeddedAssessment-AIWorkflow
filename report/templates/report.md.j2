@@ -1,6 +1,7 @@
+{# All user data is escaped via 'md' filter to prevent table/link injection #}
 # Embedded Assessment Report
 
-**Target:** {{ r.target_name | md }}  |  **Platform:** {{ r.platform | md }}  |  **Date:** {{ r.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+**Target:** {{ r.target_name | default("unknown", true) | md }}  |  **Platform:** {{ r.platform | default("unknown", true) | md }}  |  **Date:** {{ r.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}
 
 ---
 
@@ -8,18 +9,18 @@
 
 | Field        | Value |
 |--------------|-------|
-| Hostname     | {{ r.system_info.hostname | md }} |
-| Kernel       | {{ r.system_info.kernel | md }} |
-| Architecture | {{ r.system_info.architecture | md }} |
-| OS Release   | {{ r.system_info.os_release | md }} |
-| Uptime       | {{ r.system_info.uptime | md }} |
+| Hostname     | {{ r.system_info.hostname | default("", true) | md }} |
+| Kernel       | {{ r.system_info.kernel | default("", true) | md }} |
+| Architecture | {{ r.system_info.architecture | default("", true) | md }} |
+| OS Release   | {{ r.system_info.os_release | default("", true) | md }} |
+| Uptime       | {{ r.system_info.uptime | default("", true) | md }} |
 
 {% if r.processes %}
 ## Processes ({{ r.processes | length }})
 
 | PID | User | CPU% | MEM% | State | Command |
 |-----|------|------|------|-------|---------|
-{% for p in r.processes %}| {{ p.pid }} | {{ p.user | md }} | {{ p.cpu_percent }} | {{ p.mem_percent }} | {{ p.state | md }} | {{ p.command | md }} |
+{% for p in r.processes %}| {{ p.pid }} | {{ p.user | default("", true) | md }} | {{ p.cpu_percent }} | {{ p.mem_percent }} | {{ p.state | default("", true) | md }} | {{ p.command | default("", true) | md }} |
 {% endfor %}
 {% endif %}
 
@@ -28,7 +29,7 @@
 
 | Name | State | Enabled |
 |------|-------|---------|
-{% for s in r.services %}| {{ s.name | md }} | {{ s.state | md }} | {{ s.enabled }} |
+{% for s in r.services %}| {{ s.name | default("", true) | md }} | {{ s.state | default("", true) | md }} | {{ s.enabled }} |
 {% endfor %}
 {% endif %}
 
@@ -37,7 +38,7 @@
 
 | Protocol | Port | Address | Process |
 |----------|------|---------|---------|
-{% for p in r.open_ports %}| {{ p.protocol | md }} | {{ p.port }} | {{ p.address | md }} | {{ p.process | md }} |
+{% for p in r.open_ports %}| {{ p.protocol | default("", true) | md }} | {{ p.port }} | {{ p.address | default("", true) | md }} | {{ p.process | default("", true) | md }} |
 {% endfor %}
 {% endif %}
 
@@ -46,7 +47,7 @@
 
 | ID | Category | Description | Status | Detail |
 |----|----------|-------------|--------|--------|
-{% for h in r.hardening %}| {{ h.check_id | md }} | {{ h.category | md }} | {{ h.description | md }} | **{{ h.status | upper }}** | {{ h.detail | md }} |
+{% for h in r.hardening %}| {{ h.check_id | default("", true) | md }} | {{ h.category | default("", true) | md }} | {{ h.description | default("", true) | md }} | **{{ h.status | default("unknown", true) | upper }}** | {{ h.detail | default("", true) | md }} |
 {% endfor %}
 {% endif %}
 
@@ -55,7 +56,7 @@
 
 | Type | Device | Description | Accessible |
 |------|--------|-------------|------------|
-{% for hw in r.hardware_interfaces %}| {{ hw.type | upper }} | {{ hw.device_path | md }} | {{ hw.description | md }} | {{ hw.accessible }} |
+{% for hw in r.hardware_interfaces %}| {{ hw.type | upper }} | {{ hw.device_path | default("", true) | md }} | {{ hw.description | default("", true) | md }} | {{ hw.accessible }} |
 {% endfor %}
 {% endif %}
 

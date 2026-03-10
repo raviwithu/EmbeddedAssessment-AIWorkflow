@@ -73,10 +73,11 @@ def _parse_local_address(local: str) -> tuple[str, str]:
     if bracket_match:
         return bracket_match.group(1), bracket_match.group(2)
 
-    # Triple-colon IPv6 shorthand: :::22
-    triple_match = re.match(r'(:::?)(\d+)$', local)
+    # Triple-colon IPv6 shorthand: :::22 (wildcard) or ::1:22
+    triple_match = re.match(r'(.*?):::?(\d+)$', local)
     if triple_match:
-        return "::", triple_match.group(2)
+        addr = triple_match.group(1) or "::"
+        return addr, triple_match.group(2)
 
     # Standard addr:port (IPv4 or *:port)
     addr, _, port_str = local.rpartition(":")

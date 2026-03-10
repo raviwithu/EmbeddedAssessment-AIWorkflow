@@ -6,13 +6,20 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 
 class ConnectionConfig(BaseModel):
     method: str = "ssh"
     host: str = "127.0.0.1"
     port: int = 22
+
+    @field_validator("port")
+    @classmethod
+    def _validate_port(cls, v: int) -> int:
+        if not (1 <= v <= 65535):
+            raise ValueError(f"Port must be 1-65535, got {v}")
+        return v
     username: str = "root"
     auth: Literal["key", "password"] = "key"
     key_path: str = "~/.ssh/id_ed25519"

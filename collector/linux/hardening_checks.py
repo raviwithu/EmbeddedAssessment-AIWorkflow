@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import re
 
-from collector.common.transport import Transport
+from collector.common.transport import Transport, TransportError
 from collector.models import HardeningCheck
 
 _SAFE_SETTING = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -52,7 +52,7 @@ def run_hardening_checks(transport: Transport) -> list[HardeningCheck]:
     for fn in _ALL_CHECKS:
         try:
             checks.append(fn(transport))
-        except Exception as exc:
+        except (TransportError, ValueError, OSError) as exc:
             # Derive a check_id from the function name (e.g. _check_firewall -> firewall)
             name = fn.__name__.removeprefix("_check_")
             logger.warning("Hardening check '%s' failed: %s", name, exc)
