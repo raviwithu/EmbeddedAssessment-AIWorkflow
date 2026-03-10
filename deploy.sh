@@ -60,20 +60,37 @@ main() {
 
     echo ""
     info "Waiting for services to become healthy..."
-    sleep 3
+
+    # Poll health endpoints instead of a fixed sleep
+    MAX_WAIT=30
+    INTERVAL=2
 
     # Health check — collector
-    if curl -sf http://localhost:8000/health &>/dev/null; then
-        info "Collector API    : http://localhost:8000  (healthy)"
-    else
-        warn "Collector API    : http://localhost:8000  (starting — may take a few seconds)"
+    elapsed=0
+    while [ "$elapsed" -lt "$MAX_WAIT" ]; do
+        if curl -sf http://localhost:8000/health &>/dev/null; then
+            info "Collector API    : http://localhost:8000  (healthy)"
+            break
+        fi
+        sleep "$INTERVAL"
+        elapsed=$((elapsed + INTERVAL))
+    done
+    if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+        warn "Collector API    : http://localhost:8000  (not healthy after ${MAX_WAIT}s)"
     fi
 
-    # n8n
-    if curl -sf http://localhost:5678 &>/dev/null; then
-        info "n8n Dashboard    : http://localhost:5678  (healthy)"
-    else
-        warn "n8n Dashboard    : http://localhost:5678  (starting — may take a few seconds)"
+    # Health check — n8n
+    elapsed=0
+    while [ "$elapsed" -lt "$MAX_WAIT" ]; do
+        if curl -sf http://localhost:5678 &>/dev/null; then
+            info "n8n Dashboard    : http://localhost:5678  (healthy)"
+            break
+        fi
+        sleep "$INTERVAL"
+        elapsed=$((elapsed + INTERVAL))
+    done
+    if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+        warn "n8n Dashboard    : http://localhost:5678  (not healthy after ${MAX_WAIT}s)"
     fi
 
     echo ""

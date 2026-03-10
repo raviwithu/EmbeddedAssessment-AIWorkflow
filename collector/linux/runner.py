@@ -160,11 +160,11 @@ def run_linux_assessment(
 
         result.system_info = collect_system_info(transport)
 
-        if modules.process_inventory.get("enabled", True):
+        if modules.process_inventory.enabled:
             result.processes = collect_processes(transport)
             logger.info("Collected %d processes", len(result.processes))
 
-        if modules.service_port_inventory.get("enabled", True):
+        if modules.service_port_inventory.enabled:
             result.services = collect_services(transport)
             result.open_ports = collect_open_ports(transport)
             logger.info(
@@ -173,11 +173,11 @@ def run_linux_assessment(
                 len(result.open_ports),
             )
 
-        if modules.hardening_checks.get("enabled", True):
+        if modules.hardening_checks.enabled:
             result.hardening = run_hardening_checks(transport)
             logger.info("Ran %d hardening checks", len(result.hardening))
 
-        if modules.hardware_comm.get("enabled", True):
+        if modules.hardware_comm.enabled:
             result.hardware_interfaces = collect_hardware_interfaces(transport)
             logger.info("Found %d hardware interfaces", len(result.hardware_interfaces))
 

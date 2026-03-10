@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -40,12 +40,12 @@ class HardeningCheck(BaseModel):
     check_id: str
     category: str
     description: str
-    status: str  # pass | fail | warn | info
+    status: Literal["pass", "fail", "warn", "info"]
     detail: str = ""
 
 
 class HardwareInterface(BaseModel):
-    type: str  # uart | spi | i2c | gpio | usb | other
+    type: Literal["uart", "spi", "i2c", "gpio", "usb", "other"]
     device_path: str
     description: str = ""
     accessible: bool = False
@@ -94,7 +94,7 @@ class TargetConnectionRequest(BaseModel):
     username: str = ""
     auth: Literal["key", "password"] | None = None
     key_path: str = ""
-    password: str = ""
+    password: SecretStr = SecretStr("")
     timeout_seconds: int = 0
     command_timeout: int = 0
 
@@ -120,8 +120,9 @@ class TargetConnectionRequest(BaseModel):
             self.auth = env_auth if env_auth in ("key", "password") else "key"
         if not self.key_path:
             self.key_path = os.environ.get("SSH_KEY_PATH", "~/.ssh/id_ed25519")
-        if not self.password:
-            self.password = os.environ.get("SSH_PASSWORD", "")
+        if not self.password.get_secret_value():
+            env_pw = os.environ.get("SSH_PASSWORD", "")
+            self.password = SecretStr(env_pw)
         if self.timeout_seconds == 0:
             self.timeout_seconds = int(os.environ.get("SSH_TIMEOUT", "10"))
         if self.command_timeout == 0:

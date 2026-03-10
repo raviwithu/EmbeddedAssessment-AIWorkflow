@@ -10,23 +10,40 @@ from collector.models import AssessmentResult
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
+# Cache Environment instances — one per autoescape mode.
+_html_env: Environment | None = None
+_md_env: Environment | None = None
 
-def _env() -> Environment:
-    return Environment(
-        loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-        autoescape=True,
-    )
+
+def _get_html_env() -> Environment:
+    global _html_env
+    if _html_env is None:
+        _html_env = Environment(
+            loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+            autoescape=True,
+        )
+    return _html_env
+
+
+def _get_md_env() -> Environment:
+    global _md_env
+    if _md_env is None:
+        _md_env = Environment(
+            loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+            autoescape=False,
+        )
+    return _md_env
 
 
 def render_html(result: AssessmentResult) -> str:
     """Render assessment result to an HTML string."""
-    template = _env().get_template("report.html.j2")
+    template = _get_html_env().get_template("report.html.j2")
     return template.render(r=result)
 
 
 def render_markdown(result: AssessmentResult) -> str:
     """Render assessment result to a Markdown string."""
-    template = _env().get_template("report.md.j2")
+    template = _get_md_env().get_template("report.md.j2")
     return template.render(r=result)
 
 

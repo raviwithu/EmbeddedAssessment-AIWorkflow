@@ -104,7 +104,17 @@ class SSHTransport(Transport):
 
     def connect(self) -> None:
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        # Load system known-hosts and optional custom file; reject unknown keys
+        # by default (WarningPolicy logs + accepts for usability, but avoids
+        # the silent-accept security hole of AutoAddPolicy).
+        known_hosts = Path(self._config.known_hosts_path).expanduser()
+        if known_hosts.exists():
+            client.load_host_keys(str(known_hosts))
+        system_known = Path("~/.ssh/known_hosts").expanduser()
+        if system_known.exists():
+            client.load_system_host_keys(str(system_known))
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
 
         kw: dict = {
             "hostname": self._config.host,
@@ -120,7 +130,7 @@ class SSHTransport(Transport):
                 raise ConnectionFailed(f"SSH key not found: {key_path}")
             kw["key_filename"] = str(key_path)
         else:
-            kw["password"] = self._config.password
+            kw["password"] = self._config.password.get_secret_value()
 
         logger.info(
             "SSH connecting to %s:%d as %s",

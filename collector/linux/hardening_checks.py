@@ -38,10 +38,25 @@ def run_hardening_checks(transport: Transport) -> list[HardeningCheck]:
     return checks
 
 
-def _check_root_login(t: Transport) -> HardeningCheck:
-    r = t.run("grep -i '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null || echo NOTFOUND")
+def _grep_sshd_setting(t: Transport, setting: str) -> str:
+    """Search sshd_config and drop-in configs for a setting.
+
+    Checks both /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/*.conf.
+    Returns the last match (which is the effective value), or "NOTFOUND".
+    """
+    cmd = (
+        f"grep -hi '^{setting}' "
+        "/etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf "
+        "2>/dev/null | tail -1"
+    )
+    r = t.run(cmd)
     value = r.stdout.strip()
-    if "NOTFOUND" in value:
+    return value if value else "NOTFOUND"
+
+
+def _check_root_login(t: Transport) -> HardeningCheck:
+    value = _grep_sshd_setting(t, "PermitRootLogin")
+    if value == "NOTFOUND":
         return _check("H-001", "SSH", "PermitRootLogin setting", "warn", "sshd_config not found")
     if "no" in value.lower():
         return _check("H-001", "SSH", "PermitRootLogin setting", "pass", value)
@@ -49,9 +64,8 @@ def _check_root_login(t: Transport) -> HardeningCheck:
 
 
 def _check_password_auth(t: Transport) -> HardeningCheck:
-    r = t.run("grep -i '^PasswordAuthentication' /etc/ssh/sshd_config 2>/dev/null || echo NOTFOUND")
-    value = r.stdout.strip()
-    if "NOTFOUND" in value:
+    value = _grep_sshd_setting(t, "PasswordAuthentication")
+    if value == "NOTFOUND":
         return _check("H-002", "SSH", "PasswordAuthentication setting", "warn", "Not found")
     if "no" in value.lower():
         return _check("H-002", "SSH", "PasswordAuthentication setting", "pass", value)
@@ -97,8 +111,19 @@ def _check_core_dumps(t: Transport) -> HardeningCheck:
 
 
 def _check_suid_files(t: Transport) -> HardeningCheck:
-    r = t.run("find /usr -perm -4000 -type f 2>/dev/null | head -30")
+    # Search all common binary paths; use wc -l for an accurate count
+    # instead of head which caps and misreports.
+    r = t.run(
+        "find /usr /bin /sbin /opt -perm -4000 -type f 2>/dev/null"
+    )
     files = [f for f in r.stdout.strip().splitlines() if f]
-    if len(files) > 15:
-        return _check("H-007", "Filesystem", "SUID binary count", "warn", f"{len(files)}+ SUID binaries found")
-    return _check("H-007", "Filesystem", "SUID binary count", "pass", f"{len(files)} SUID binaries found")
+    count = len(files)
+    if count > 15:
+        return _check(
+            "H-007", "Filesystem", "SUID binary count", "warn",
+            f"{count} SUID binaries found",
+        )
+    return _check(
+        "H-007", "Filesystem", "SUID binary count", "pass",
+        f"{count} SUID binaries found",
+    )

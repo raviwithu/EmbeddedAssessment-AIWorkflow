@@ -25,59 +25,59 @@ def collect_hardware_interfaces(transport: Transport) -> list[HardwareInterface]
     return interfaces
 
 
-def _find_serial(t: Transport) -> list[HardwareInterface]:
-    r = t.run("ls /dev/ttyS* /dev/ttyUSB* /dev/ttyAMA* /dev/ttyACM* 2>/dev/null")
+def _check_readable(t: Transport, paths: list[str]) -> set[str]:
+    """Return the subset of *paths* that the current user can read."""
+    if not paths:
+        return set()
+    tests = " && ".join(f'test -r "{p}" && echo "{p}"' for p in paths)
+    r = t.run(f"{{ {tests}; }} 2>/dev/null; true")
+    return {line.strip() for line in r.stdout.strip().splitlines() if line.strip()}
+
+
+def _find_dev_interfaces(
+    t: Transport, glob: str, iface_type: str, description: str
+) -> list[HardwareInterface]:
+    """Generic helper: list device files matching *glob* and check readability."""
+    r = t.run(f"ls {glob} 2>/dev/null")
+    paths = [line.strip() for line in r.stdout.strip().splitlines() if line.strip()]
+    readable = _check_readable(t, paths)
     return [
         HardwareInterface(
-            type="uart",
-            device_path=line.strip(),
-            description="Serial/UART device",
-            accessible=True,
+            type=iface_type,
+            device_path=p,
+            description=description,
+            accessible=p in readable,
         )
-        for line in r.stdout.strip().splitlines()
-        if line.strip()
+        for p in paths
     ]
+
+
+def _find_serial(t: Transport) -> list[HardwareInterface]:
+    return _find_dev_interfaces(
+        t, "/dev/ttyS* /dev/ttyUSB* /dev/ttyAMA* /dev/ttyACM*", "uart", "Serial/UART device"
+    )
 
 
 def _find_spi(t: Transport) -> list[HardwareInterface]:
-    r = t.run("ls /dev/spidev* 2>/dev/null")
-    return [
-        HardwareInterface(
-            type="spi",
-            device_path=line.strip(),
-            description="SPI device",
-            accessible=True,
-        )
-        for line in r.stdout.strip().splitlines()
-        if line.strip()
-    ]
+    return _find_dev_interfaces(t, "/dev/spidev*", "spi", "SPI device")
 
 
 def _find_i2c(t: Transport) -> list[HardwareInterface]:
-    r = t.run("ls /dev/i2c-* 2>/dev/null")
-    return [
-        HardwareInterface(
-            type="i2c",
-            device_path=line.strip(),
-            description="I2C bus",
-            accessible=True,
-        )
-        for line in r.stdout.strip().splitlines()
-        if line.strip()
-    ]
+    return _find_dev_interfaces(t, "/dev/i2c-*", "i2c", "I2C bus")
 
 
 def _find_gpio(t: Transport) -> list[HardwareInterface]:
-    r = t.run("ls /sys/class/gpio/gpiochip* 2>/dev/null || ls /dev/gpiochip* 2>/dev/null")
+    r = t.run("ls /sys/class/gpio/gpiochip* /dev/gpiochip* 2>/dev/null")
+    paths = [line.strip() for line in r.stdout.strip().splitlines() if line.strip()]
+    readable = _check_readable(t, paths)
     return [
         HardwareInterface(
             type="gpio",
-            device_path=line.strip(),
+            device_path=p,
             description="GPIO controller",
-            accessible=True,
+            accessible=p in readable,
         )
-        for line in r.stdout.strip().splitlines()
-        if line.strip()
+        for p in paths
     ]
 
 
@@ -90,7 +90,7 @@ def _find_usb(t: Transport) -> list[HardwareInterface]:
             type="usb",
             device_path="",
             description=line.strip(),
-            accessible=True,
+            accessible=True,  # lsusb only lists devices that are accessible
         )
         for line in r.stdout.strip().splitlines()
         if line.strip()

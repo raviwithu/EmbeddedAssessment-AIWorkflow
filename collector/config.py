@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 
 class ConnectionConfig(BaseModel):
@@ -16,8 +14,9 @@ class ConnectionConfig(BaseModel):
     username: str = "root"
     auth: str = "key"
     key_path: str = "~/.ssh/id_ed25519"
-    password: str = ""
+    password: SecretStr = SecretStr("")
     timeout_seconds: int = 10
+    known_hosts_path: str = "~/.ssh/known_hosts"
 
 
 class TargetConfig(BaseModel):
@@ -26,11 +25,15 @@ class TargetConfig(BaseModel):
     connection: ConnectionConfig = Field(default_factory=ConnectionConfig)
 
 
+class ModuleToggle(BaseModel):
+    enabled: bool = True
+
+
 class ModulesConfig(BaseModel):
-    process_inventory: dict[str, Any] = Field(default_factory=lambda: {"enabled": True})
-    service_port_inventory: dict[str, Any] = Field(default_factory=lambda: {"enabled": True})
-    hardening_checks: dict[str, Any] = Field(default_factory=lambda: {"enabled": True})
-    hardware_comm: dict[str, Any] = Field(default_factory=lambda: {"enabled": True})
+    process_inventory: ModuleToggle = Field(default_factory=ModuleToggle)
+    service_port_inventory: ModuleToggle = Field(default_factory=ModuleToggle)
+    hardening_checks: ModuleToggle = Field(default_factory=ModuleToggle)
+    hardware_comm: ModuleToggle = Field(default_factory=ModuleToggle)
 
 
 class OutputConfig(BaseModel):

@@ -11,13 +11,15 @@ GET  /health                 — liveness probe
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import contextmanager
 from typing import Generator
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from collector.common.transport import (
     ConnectionFailed,
@@ -47,12 +49,35 @@ from report.generator import render_html, render_markdown
 
 logger = logging.getLogger(__name__)
 
+# Default request timeout in seconds (overridable via REQUEST_TIMEOUT env var).
+REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
+
 app = FastAPI(
     title="Embedded Assessment Collector",
-    version="0.2.0",
+    version="0.3.0",
     description="REST API for embedded Linux target assessment — "
     "system inventory, security hardening, and hardware enumeration.",
 )
+
+
+# ---------------------------------------------------------------------------
+# Middleware — request timeout
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    """Cancel requests that exceed REQUEST_TIMEOUT seconds."""
+    try:
+        return await asyncio.wait_for(
+            call_next(request),
+            timeout=REQUEST_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Request timed out: %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=504,
+            content={"detail": f"Request timed out after {REQUEST_TIMEOUT}s"},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +112,11 @@ def _open_transport(req: TargetConnectionRequest) -> Generator[Transport, None, 
         ) from exc
     try:
         yield transport
+    except TransportError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Transport error on {req.host}: {exc}",
+        ) from exc
     finally:
         transport.close()
 
@@ -96,7 +126,7 @@ def _open_transport(req: TargetConnectionRequest) -> Generator[Transport, None, 
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
-def health() -> dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
@@ -104,19 +134,7 @@ def health() -> dict[str, str]:
 # POST /collect/linux/system
 # ---------------------------------------------------------------------------
 
-@app.post(
-    "/collect/linux/system",
-    response_model=SystemCollectResponse,
-    summary="Collect system info, processes, services, and ports",
-    tags=["collect"],
-)
-def collect_linux_system(req: SystemCollectRequest) -> SystemCollectResponse:
-    """Connect to a Linux target over SSH and collect system-level inventory.
-
-    Gathers hostname, kernel, OS info, running processes, systemd services,
-    and listening ports.  Each sub-collector runs independently — a failure
-    in one does not block the others.
-    """
+def _do_collect_system(req: SystemCollectRequest) -> SystemCollectResponse:
     with _open_transport(req.target) as transport:
         return collect_system_domain(
             transport,
@@ -127,24 +145,27 @@ def collect_linux_system(req: SystemCollectRequest) -> SystemCollectResponse:
         )
 
 
+@app.post(
+    "/collect/linux/system",
+    response_model=SystemCollectResponse,
+    summary="Collect system info, processes, services, and ports",
+    tags=["collect"],
+)
+async def collect_linux_system(req: SystemCollectRequest) -> SystemCollectResponse:
+    """Connect to a Linux target over SSH and collect system-level inventory.
+
+    Gathers hostname, kernel, OS info, running processes, systemd services,
+    and listening ports.  Each sub-collector runs independently — a failure
+    in one does not block the others.
+    """
+    return await asyncio.to_thread(_do_collect_system, req)
+
+
 # ---------------------------------------------------------------------------
 # POST /collect/linux/security
 # ---------------------------------------------------------------------------
 
-@app.post(
-    "/collect/linux/security",
-    response_model=SecurityCollectResponse,
-    summary="Run hardening and security-posture checks",
-    tags=["collect"],
-)
-def collect_linux_security(req: SecurityCollectRequest) -> SecurityCollectResponse:
-    """Run non-intrusive hardening checks on a Linux target.
-
-    Checks SSH config, firewall rules, SELinux mode, ASLR, core dump
-    settings, and SUID binary counts.  Optionally filter to specific
-    check IDs.  Returns per-check results plus a pass/fail/warn/info
-    summary.
-    """
+def _do_collect_security(req: SecurityCollectRequest) -> SecurityCollectResponse:
     with _open_transport(req.target) as transport:
         return collect_security_domain(
             transport,
@@ -153,9 +174,35 @@ def collect_linux_security(req: SecurityCollectRequest) -> SecurityCollectRespon
         )
 
 
+@app.post(
+    "/collect/linux/security",
+    response_model=SecurityCollectResponse,
+    summary="Run hardening and security-posture checks",
+    tags=["collect"],
+)
+async def collect_linux_security(req: SecurityCollectRequest) -> SecurityCollectResponse:
+    """Run non-intrusive hardening checks on a Linux target.
+
+    Checks SSH config, firewall rules, SELinux mode, ASLR, core dump
+    settings, and SUID binary counts.  Optionally filter to specific
+    check IDs.  Returns per-check results plus a pass/fail/warn/info
+    summary.
+    """
+    return await asyncio.to_thread(_do_collect_security, req)
+
+
 # ---------------------------------------------------------------------------
 # POST /collect/linux/hwcomms
 # ---------------------------------------------------------------------------
+
+def _do_collect_hwcomms(req: HwCommsCollectRequest) -> HwCommsCollectResponse:
+    with _open_transport(req.target) as transport:
+        return collect_hwcomms_domain(
+            transport,
+            req.target.host,
+            interface_types=req.interface_types,
+        )
+
 
 @app.post(
     "/collect/linux/hwcomms",
@@ -163,18 +210,13 @@ def collect_linux_security(req: SecurityCollectRequest) -> SecurityCollectRespon
     summary="Enumerate hardware communication interfaces",
     tags=["collect"],
 )
-def collect_linux_hwcomms(req: HwCommsCollectRequest) -> HwCommsCollectResponse:
+async def collect_linux_hwcomms(req: HwCommsCollectRequest) -> HwCommsCollectResponse:
     """Enumerate UART, SPI, I2C, GPIO, and USB interfaces on a Linux target.
 
     Optionally filter to specific interface types.  All checks are read-only
     device enumeration — no bus interaction or intrusive probing.
     """
-    with _open_transport(req.target) as transport:
-        return collect_hwcomms_domain(
-            transport,
-            req.target.host,
-            interface_types=req.interface_types,
-        )
+    return await asyncio.to_thread(_do_collect_hwcomms, req)
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +229,7 @@ def collect_linux_hwcomms(req: HwCommsCollectRequest) -> HwCommsCollectResponse:
     summary="Render an assessment result to HTML and/or Markdown",
     tags=["report"],
 )
-def report_render(req: ReportRenderRequest) -> ReportRenderResponse:
+async def report_render(req: ReportRenderRequest) -> ReportRenderResponse:
     """Accept a full AssessmentResult and render it into the requested
     report formats.  Returns the rendered content inline (no file I/O).
     """
