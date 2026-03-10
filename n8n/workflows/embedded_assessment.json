@@ -15,6 +15,41 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.mode }}",
+              "operation": "equals",
+              "value2": "full"
+            }
+          ]
+        }
+      },
+      "name": "Check Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 300],
+      "id": "node-check-mode"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/orchestrate",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: { host: $json.host || $env.SSH_HOST, port: $json.port || Number($env.SSH_PORT) || 22, username: $json.username || $env.SSH_USERNAME || 'root', auth: $json.auth || $env.SSH_AUTH || 'key', key_path: $json.key_path || $env.SSH_KEY_PATH || '~/.ssh/id_ed25519', password: $json.password || $env.SSH_PASSWORD || '' }, output_dir: $json.output_dir || './output' }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "Full Orchestration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 200],
+      "id": "node-orchestrate"
+    },
+    {
+      "parameters": {
         "url": "http://collector:8000/assess",
         "method": "POST",
         "sendBody": true,
@@ -30,10 +65,10 @@
           "timeout": 120000
         }
       },
-      "name": "Run Assessment",
+      "name": "Config Assessment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [500, 300],
+      "position": [750, 400],
       "id": "node-assess"
     },
     {
@@ -41,7 +76,7 @@
       "name": "Return Results",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [750, 300],
+      "position": [1000, 300],
       "id": "node-respond"
     }
   ],
@@ -50,14 +85,43 @@
       "main": [
         [
           {
-            "node": "Run Assessment",
+            "node": "Check Mode",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run Assessment": {
+    "Check Mode": {
+      "main": [
+        [
+          {
+            "node": "Full Orchestration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Full Orchestration": {
+      "main": [
+        [
+          {
+            "node": "Return Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Assessment": {
       "main": [
         [
           {

@@ -2,13 +2,18 @@
 
 Endpoints
 ---------
-POST /assess                 — full config-driven assessment (all or by target name)
-GET  /targets                — list configured targets from config file
-POST /collect/linux/system   — system info, processes, services, ports
-POST /collect/linux/security — hardening / security-posture checks
-POST /collect/linux/hwcomms  — hardware communication interface enumeration
-POST /report/render          — render an AssessmentResult to HTML / Markdown
-GET  /health                 — liveness probe
+POST /orchestrate             — detect Linux, run ALL collectors, save per-host
+POST /assess                  — full config-driven assessment (all or by target name)
+GET  /targets                 — list configured targets from config file
+POST /collect/linux/system    — system info, processes, services, ports
+POST /collect/linux/security  — hardening / security-posture checks
+POST /collect/linux/hwcomms   — hardware communication interface enumeration
+POST /collect/linux/service-map — service-to-process mapping
+POST /forensic/baseline       — gold image baseline capture
+POST /forensic/phase0         — volatile environment data capture
+POST /forensic/phase1         — memory acquisition
+POST /report/render           — render an AssessmentResult to HTML / Markdown
+GET  /health                  — liveness probe
 """
 
 from __future__ import annotations
@@ -58,6 +63,7 @@ from collector.models import (
     SystemCollectResponse,
     TargetConnectionRequest,
 )
+from collector.orchestrator import run_full_assessment
 from report.generator import render_html, render_markdown
 
 logger = logging.getLogger(__name__)
@@ -241,6 +247,68 @@ async def assess(req: AssessRequest = AssessRequest()) -> AssessResponse:
     Targets and module toggles are read from ``config/config.yaml``.
     """
     return await asyncio.to_thread(_do_assess, req.target_name)
+
+
+# ---------------------------------------------------------------------------
+# POST /orchestrate
+# ---------------------------------------------------------------------------
+
+class OrchestrateRequest(BaseModel):
+    """Request body for POST /orchestrate."""
+
+    target: TargetConnectionRequest
+    output_dir: str = "./output"
+
+
+class OrchestrateSummary(BaseModel):
+    """Response from POST /orchestrate."""
+
+    hostname: str = ""
+    platform: str = ""
+    collectors_run: list[str] = Field(default_factory=list)
+    collectors_failed: list[str] = Field(default_factory=list)
+    artifact_counts: dict[str, int] = Field(default_factory=dict)
+    output_path: str = ""
+    errors: list[str] = Field(default_factory=list)
+
+
+def _do_orchestrate(req: OrchestrateRequest) -> OrchestrateSummary:
+    cfg = _to_connection_config(req.target)
+    transport = create_transport(cfg)
+    try:
+        transport.connect()
+    except ConnectionFailed as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Cannot connect to {req.target.host}:{req.target.port}: {exc}",
+        ) from exc
+    try:
+        summary = run_full_assessment(transport, output_dir=req.output_dir)
+        return OrchestrateSummary(**summary)
+    except TransportError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Transport error on {req.target.host}: {exc}",
+        ) from exc
+    finally:
+        transport.close()
+
+
+@app.post(
+    "/orchestrate",
+    response_model=OrchestrateSummary,
+    summary="Detect Linux and run ALL collectors with per-host storage",
+    tags=["orchestrate"],
+)
+async def orchestrate(req: OrchestrateRequest) -> OrchestrateSummary:
+    """Connect to a target, detect if it is Linux, then run every collector:
+    system info, processes, services, ports, service-process map, hardening,
+    hardware interfaces, baseline, Phase 0, and Phase 1.
+
+    Results are saved to ``output/<hostname>/`` with assessment JSON,
+    HTML/Markdown reports, and forensic artifact folders.
+    """
+    return await asyncio.to_thread(_do_orchestrate, req)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,271 @@
+{
+  "name": "Forensic Collection Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trigger-forensic",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "id": "node-forensic-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "target_json",
+              "value": "={{ JSON.stringify({ host: $json.host || $env.SSH_HOST, port: $json.port || Number($env.SSH_PORT) || 22, username: $json.username || $env.SSH_USERNAME || 'root', auth: $json.auth || $env.SSH_AUTH || 'key', key_path: $json.key_path || $env.SSH_KEY_PATH || '~/.ssh/id_ed25519', password: $json.password || $env.SSH_PASSWORD || '' }) }}"
+            },
+            {
+              "name": "output_dir",
+              "value": "={{ $json.output_dir || './output/baselines' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build Target Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [420, 300],
+      "id": "node-build-config"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/collect/linux/system",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($json.target_json) }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Detect System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, 300],
+      "id": "node-detect-system"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/forensic/baseline",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json), output_dir: $('Build Target Config').item.json.output_dir }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Baseline Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200],
+      "id": "node-baseline"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/forensic/phase0",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json), output_dir: $('Build Target Config').item.json.output_dir }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Phase 0 — Environment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1140, 200],
+      "id": "node-phase0"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/forensic/phase1",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json), output_dir: $('Build Target Config').item.json.output_dir }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "Phase 1 — Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1380, 200],
+      "id": "node-phase1"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/collect/linux/security",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json) }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Security Checks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 400],
+      "id": "node-security"
+    },
+    {
+      "parameters": {
+        "url": "http://collector:8000/collect/linux/hwcomms",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: JSON.parse($('Build Target Config').item.json.target_json) }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Hardware Interfaces",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1140, 400],
+      "id": "node-hwcomms"
+    },
+    {
+      "parameters": {
+        "mode": "multiplex"
+      },
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1620, 300],
+      "id": "node-merge"
+    },
+    {
+      "parameters": {},
+      "name": "Return Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1860, 300],
+      "id": "node-forensic-respond"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Target Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Target Config": {
+      "main": [
+        [
+          {
+            "node": "Detect System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect System": {
+      "main": [
+        [
+          {
+            "node": "Baseline Collection",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Security Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baseline Collection": {
+      "main": [
+        [
+          {
+            "node": "Phase 0 — Environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 0 — Environment": {
+      "main": [
+        [
+          {
+            "node": "Phase 1 — Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 1 — Memory": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Checks": {
+      "main": [
+        [
+          {
+            "node": "Hardware Interfaces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hardware Interfaces": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Return Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "embedded-assessment-dev"
+  }
+}
