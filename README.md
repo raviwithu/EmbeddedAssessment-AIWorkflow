@@ -71,22 +71,47 @@ Stops all running containers. Supports optional flags for cleanup:
 
 ## API Endpoints
 
-| Method | Path       | Description                    |
-|--------|------------|--------------------------------|
-| GET    | /health    | Health check                   |
-| GET    | /targets   | List configured targets        |
-| POST   | /assess    | Trigger assessment (all or by name) |
+| Method | Path                     | Description                                   |
+|--------|--------------------------|-----------------------------------------------|
+| GET    | /health                  | Liveness probe                                |
+| GET    | /targets                 | List configured targets from config file      |
+| POST   | /assess                  | Full config-driven assessment (all or by name) |
+| POST   | /collect/linux/system    | System info, processes, services, ports       |
+| POST   | /collect/linux/security  | Hardening / security-posture checks           |
+| POST   | /collect/linux/hwcomms   | Hardware communication interface enumeration  |
+| POST   | /report/render           | Render AssessmentResult to HTML / Markdown     |
 
-### Trigger assessment
+### Config-driven assessment
 
 ```bash
-# Assess all targets
+# Assess all targets defined in config/config.yaml
 curl -X POST http://localhost:8000/assess -H 'Content-Type: application/json' -d '{}'
 
-# Assess specific target
+# Assess a specific target by name
 curl -X POST http://localhost:8000/assess -H 'Content-Type: application/json' \
   -d '{"target_name": "linux-device-01"}'
 ```
+
+### Per-domain collection (with SSH credentials)
+
+```bash
+# System inventory
+curl -X POST http://localhost:8000/collect/linux/system \
+  -H 'Content-Type: application/json' \
+  -d '{"target": {"host": "192.168.1.100"}}'
+
+# Security checks only
+curl -X POST http://localhost:8000/collect/linux/security \
+  -H 'Content-Type: application/json' \
+  -d '{"target": {"host": "192.168.1.100"}, "checks": ["H-001", "H-005"]}'
+
+# Hardware interface enumeration
+curl -X POST http://localhost:8000/collect/linux/hwcomms \
+  -H 'Content-Type: application/json' \
+  -d '{"target": {"host": "192.168.1.100"}, "interface_types": ["uart", "i2c"]}'
+```
+
+> SSH credentials fall back to `SSH_*` environment variables when not provided in the request body.
 
 ## Collection Modules
 
@@ -120,6 +145,10 @@ n8n/
   workflows/                Importable n8n workflow definitions
 config/
   config.yaml               Sample configuration
+tests/
+  linux/                    Unit tests for collection modules
+  parsers/                  Tests for JSON normalization
+  report/                   Tests for report generation
 ```
 
 ## Configuration

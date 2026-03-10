@@ -2,6 +2,8 @@
 
 Endpoints
 ---------
+POST /assess                 — full config-driven assessment (all or by target name)
+GET  /targets                — list configured targets from config file
 POST /collect/linux/system   — system info, processes, services, ports
 POST /collect/linux/security — hardening / security-posture checks
 POST /collect/linux/hwcomms  — hardware communication interface enumeration
@@ -20,6 +22,7 @@ from typing import Generator
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from collector.common.transport import (
     ConnectionFailed,
@@ -27,13 +30,15 @@ from collector.common.transport import (
     TransportError,
     create_transport,
 )
-from collector.config import ConnectionConfig, load_config
+from collector.config import AppConfig, ConnectionConfig, load_config
 from collector.linux.runner import (
     collect_hwcomms_domain,
     collect_security_domain,
     collect_system_domain,
+    run_linux_assessment,
 )
 from collector.models import (
+    AssessmentResult,
     HwCommsCollectRequest,
     HwCommsCollectResponse,
     RenderedReport,
@@ -51,6 +56,15 @@ logger = logging.getLogger(__name__)
 
 # Default request timeout in seconds (overridable via REQUEST_TIMEOUT env var).
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
+
+# Load config from file (COLLECTOR_CONFIG env var or default path).
+_config_path = os.environ.get("COLLECTOR_CONFIG", "config/config.yaml")
+try:
+    _app_config: AppConfig = load_config(_config_path)
+    logger.info("Loaded config from %s (%d targets)", _config_path, len(_app_config.targets))
+except FileNotFoundError:
+    logger.warning("Config file %s not found — /assess and /targets will be unavailable", _config_path)
+    _app_config = AppConfig()
 
 app = FastAPI(
     title="Embedded Assessment Collector",
@@ -128,6 +142,97 @@ def _open_transport(req: TargetConnectionRequest) -> Generator[Transport, None, 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# GET /targets
+# ---------------------------------------------------------------------------
+
+class TargetSummary(BaseModel):
+    name: str
+    platform: str
+    host: str
+    port: int
+
+
+@app.get(
+    "/targets",
+    response_model=list[TargetSummary],
+    summary="List configured assessment targets",
+    tags=["config"],
+)
+async def list_targets() -> list[TargetSummary]:
+    """Return the list of targets defined in the config file."""
+    return [
+        TargetSummary(
+            name=t.name,
+            platform=t.platform,
+            host=t.connection.host,
+            port=t.connection.port,
+        )
+        for t in _app_config.targets
+    ]
+
+
+# ---------------------------------------------------------------------------
+# POST /assess
+# ---------------------------------------------------------------------------
+
+class AssessRequest(BaseModel):
+    """Request body for POST /assess."""
+    target_name: str | None = None  # None = assess all configured targets
+
+
+class AssessResponse(BaseModel):
+    """Response from POST /assess."""
+    results: list[AssessmentResult] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+def _do_assess(target_name: str | None) -> AssessResponse:
+    targets = _app_config.targets
+    modules = _app_config.modules
+
+    if not targets:
+        raise HTTPException(
+            status_code=404,
+            detail="No targets configured — add targets to config/config.yaml",
+        )
+
+    if target_name:
+        targets = [t for t in targets if t.name == target_name]
+        if not targets:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Target '{target_name}' not found in config",
+            )
+
+    results: list[AssessmentResult] = []
+    errors: list[str] = []
+
+    for target in targets:
+        try:
+            result = run_linux_assessment(target, modules)
+            results.append(result)
+        except Exception as exc:
+            errors.append(f"{target.name}: {exc}")
+
+    return AssessResponse(results=results, errors=errors)
+
+
+@app.post(
+    "/assess",
+    response_model=AssessResponse,
+    summary="Run a full config-driven assessment",
+    tags=["assess"],
+)
+async def assess(req: AssessRequest = AssessRequest()) -> AssessResponse:
+    """Run all enabled collection modules against configured targets.
+
+    Optionally provide ``target_name`` to assess a single target.
+    Targets and module toggles are read from ``config/config.yaml``.
+    """
+    return await asyncio.to_thread(_do_assess, req.target_name)
 
 
 # ---------------------------------------------------------------------------
