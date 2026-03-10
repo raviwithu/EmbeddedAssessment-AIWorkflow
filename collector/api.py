@@ -32,7 +32,10 @@ from collector.common.transport import (
 )
 from collector.config import AppConfig, ConnectionConfig, load_config
 from collector.linux.runner import (
+    collect_baseline_domain,
     collect_hwcomms_domain,
+    collect_phase0_domain,
+    collect_phase1_domain,
     collect_security_domain,
     collect_service_map_domain,
     collect_system_domain,
@@ -40,6 +43,8 @@ from collector.linux.runner import (
 )
 from collector.models import (
     AssessmentResult,
+    ForensicCollectRequest,
+    ForensicCollectResponse,
     HwCommsCollectRequest,
     HwCommsCollectResponse,
     RenderedReport,
@@ -350,6 +355,75 @@ async def collect_linux_service_map(
     which service.
     """
     return await asyncio.to_thread(_do_collect_service_map, req)
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/baseline
+# ---------------------------------------------------------------------------
+
+def _do_collect_baseline(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    with _open_transport(req.target) as transport:
+        return collect_baseline_domain(transport, req.target.host, output_dir=req.output_dir)
+
+
+@app.post(
+    "/forensic/baseline",
+    response_model=ForensicCollectResponse,
+    summary="Collect gold image baseline data",
+    tags=["forensic"],
+)
+async def forensic_baseline(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    """Capture a gold image baseline: binary hashes, processes, users,
+    kernel modules, network listeners, and more.  Stored per-host in
+    the output directory.
+    """
+    return await asyncio.to_thread(_do_collect_baseline, req)
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/phase0
+# ---------------------------------------------------------------------------
+
+def _do_collect_phase0(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    with _open_transport(req.target) as transport:
+        return collect_phase0_domain(transport, req.target.host, output_dir=req.output_dir)
+
+
+@app.post(
+    "/forensic/phase0",
+    response_model=ForensicCollectResponse,
+    summary="Phase 0 — Capture volatile environment data",
+    tags=["forensic"],
+)
+async def forensic_phase0(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    """Capture volatile system state in order of volatility: network
+    connections, processes, open files, kernel modules, memory info,
+    taint status, and mount points.
+    """
+    return await asyncio.to_thread(_do_collect_phase0, req)
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/phase1
+# ---------------------------------------------------------------------------
+
+def _do_collect_phase1(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    with _open_transport(req.target) as transport:
+        return collect_phase1_domain(transport, req.target.host, output_dir=req.output_dir)
+
+
+@app.post(
+    "/forensic/phase1",
+    response_model=ForensicCollectResponse,
+    summary="Phase 1 — Memory acquisition",
+    tags=["forensic"],
+)
+async def forensic_phase1(req: ForensicCollectRequest) -> ForensicCollectResponse:
+    """Attempt memory acquisition via LiME or /proc/kcore fallback.
+    Records dump metadata, SHA256, and kernel version for Volatility
+    profile matching.
+    """
+    return await asyncio.to_thread(_do_collect_phase1, req)
 
 
 # ---------------------------------------------------------------------------

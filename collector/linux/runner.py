@@ -13,14 +13,19 @@ from datetime import datetime, timezone
 
 from collector.common.transport import Transport, TransportError, create_transport
 from collector.config import ModulesConfig, TargetConfig
+from collector.linux.baseline import collect_baseline
+from collector.linux.forensic_storage import save_snapshot
 from collector.linux.hardening_checks import run_hardening_checks
 from collector.linux.hardware_comm import collect_hardware_interfaces
+from collector.linux.phase0_environment import collect_phase0
+from collector.linux.phase1_memory import collect_phase1
 from collector.linux.process_inventory import collect_processes
 from collector.linux.service_port_inventory import collect_open_ports, collect_services
 from collector.linux.service_process_map import collect_service_process_map
 from collector.linux.system_info import collect_system_info
 from collector.models import (
     AssessmentResult,
+    ForensicCollectResponse,
     HardeningCheck,
     HardwareInterface,
     HwCommsCollectResponse,
@@ -164,6 +169,107 @@ def collect_service_map_domain(
         target_host=host,
         timestamp=datetime.now(timezone.utc),
         mappings=mappings,
+        errors=errors,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Forensic playbook collectors
+# ---------------------------------------------------------------------------
+
+def collect_baseline_domain(
+    transport: Transport,
+    host: str,
+    output_dir: str = "./output/baselines",
+) -> ForensicCollectResponse:
+    """Collect gold image baseline and save to per-host folder."""
+    errors: list[str] = []
+    storage_path = ""
+    hostname = ""
+    artifact_count = 0
+
+    try:
+        snapshot = collect_baseline(transport)
+        hostname = snapshot.hostname
+        artifact_count = len(snapshot.artifacts)
+        errors.extend(snapshot.errors)
+        path = save_snapshot(snapshot, output_dir, "baseline")
+        storage_path = str(path)
+    except (TransportError, OSError) as exc:
+        errors.append(f"baseline: {exc}")
+
+    return ForensicCollectResponse(
+        target_host=host,
+        hostname=hostname or host,
+        timestamp=datetime.now(timezone.utc),
+        phase="baseline",
+        artifacts_collected=artifact_count,
+        storage_path=storage_path,
+        errors=errors,
+    )
+
+
+def collect_phase0_domain(
+    transport: Transport,
+    host: str,
+    output_dir: str = "./output/baselines",
+) -> ForensicCollectResponse:
+    """Run Phase 0 environment assessment and save to per-host folder."""
+    errors: list[str] = []
+    storage_path = ""
+    hostname = ""
+    artifact_count = 0
+
+    try:
+        snapshot = collect_phase0(transport)
+        hostname = snapshot.hostname
+        artifact_count = len(snapshot.artifacts)
+        errors.extend(snapshot.errors)
+        path = save_snapshot(snapshot, output_dir, "phase0")
+        storage_path = str(path)
+    except (TransportError, OSError) as exc:
+        errors.append(f"phase0: {exc}")
+
+    return ForensicCollectResponse(
+        target_host=host,
+        hostname=hostname or host,
+        timestamp=datetime.now(timezone.utc),
+        phase="phase0",
+        artifacts_collected=artifact_count,
+        storage_path=storage_path,
+        errors=errors,
+    )
+
+
+def collect_phase1_domain(
+    transport: Transport,
+    host: str,
+    output_dir: str = "./output/baselines",
+    dump_path: str = "/tmp/forensic",
+) -> ForensicCollectResponse:
+    """Run Phase 1 memory acquisition and save metadata to per-host folder."""
+    errors: list[str] = []
+    storage_path = ""
+    hostname = ""
+    artifact_count = 0
+
+    try:
+        snapshot = collect_phase1(transport, dump_path=dump_path)
+        hostname = snapshot.hostname
+        artifact_count = len(snapshot.artifacts)
+        errors.extend(snapshot.errors)
+        path = save_snapshot(snapshot, output_dir, "phase1")
+        storage_path = str(path)
+    except (TransportError, OSError) as exc:
+        errors.append(f"phase1: {exc}")
+
+    return ForensicCollectResponse(
+        target_host=host,
+        hostname=hostname or host,
+        timestamp=datetime.now(timezone.utc),
+        phase="phase1",
+        artifacts_collected=artifact_count,
+        storage_path=storage_path,
         errors=errors,
     )
 

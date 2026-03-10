@@ -235,3 +235,64 @@ class ReportRenderResponse(BaseModel):
 
     target_name: str
     reports: list[RenderedReport] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Forensic playbook models
+# ---------------------------------------------------------------------------
+
+class ForensicArtifact(BaseModel):
+    """A single captured artifact — filename and its raw content."""
+
+    filename: str
+    content: str
+    command: str = ""
+
+
+class BaselineSnapshot(BaseModel):
+    """Gold Image Baseline data for a target host."""
+
+    hostname: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    artifacts: list[ForensicArtifact] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class Phase0Snapshot(BaseModel):
+    """Phase 0 — Environment Assessment volatile data capture."""
+
+    hostname: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    artifacts: list[ForensicArtifact] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class Phase1Snapshot(BaseModel):
+    """Phase 1 — Memory Acquisition results."""
+
+    hostname: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    artifacts: list[ForensicArtifact] = Field(default_factory=list)
+    memory_dump_path: str = ""
+    memory_dump_sha256: str = ""
+    memory_dump_size_bytes: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class ForensicCollectRequest(BaseModel):
+    """Request body for forensic collection endpoints."""
+
+    target: TargetConnectionRequest
+    output_dir: str = "./output/baselines"
+
+
+class ForensicCollectResponse(BaseModel):
+    """Response from forensic collection endpoints."""
+
+    target_host: str
+    hostname: str
+    timestamp: datetime
+    phase: str
+    artifacts_collected: int = 0
+    storage_path: str = ""
+    errors: list[str] = Field(default_factory=list)
