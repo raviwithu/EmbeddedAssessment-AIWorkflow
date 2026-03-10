@@ -123,6 +123,7 @@ def _to_connection_config(req: TargetConnectionRequest) -> ConnectionConfig:
         key_path=req.key_path,
         password=req.password,
         timeout_seconds=req.timeout_seconds,
+        command_timeout=req.command_timeout,
     )
 
 

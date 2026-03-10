@@ -100,6 +100,7 @@ class SSHTransport(Transport):
 
     def __init__(self, config: ConnectionConfig) -> None:
         self._config = config
+        self._command_timeout = config.command_timeout
         self._client: paramiko.SSHClient | None = None
 
     def connect(self) -> None:
@@ -151,9 +152,11 @@ class SSHTransport(Transport):
         self._client = client
         logger.info("SSH connected to %s:%d", self._config.host, self._config.port)
 
-    def run(self, command: str, timeout: int = 30) -> CommandResult:
+    def run(self, command: str, timeout: int | None = None) -> CommandResult:
         if self._client is None:
             raise ConnectionFailed("Not connected — call connect() first")
+        if timeout is None:
+            timeout = self._command_timeout
 
         logger.debug("SSH exec (timeout=%ds): %s", timeout, command[:120])
 

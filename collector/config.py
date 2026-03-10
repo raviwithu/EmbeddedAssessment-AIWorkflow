@@ -16,6 +16,7 @@ class ConnectionConfig(BaseModel):
     key_path: str = "~/.ssh/id_ed25519"
     password: SecretStr = SecretStr("")
     timeout_seconds: int = 10
+    command_timeout: int = 30
     known_hosts_path: str = "~/.ssh/known_hosts"
 
 
