@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from collector.common.sanitize import sanitize_hostname as _sanitize
 from collector.models import BaselineSnapshot, ForensicArtifact, Phase0Snapshot, Phase1Snapshot
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,3 @@ def _update_manifest(
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
 
-def _sanitize(hostname: str) -> str:
-    """Sanitize hostname for use as a directory name."""
-    name = hostname.replace("\x00", "").replace("/", "_").replace("\\", "_").replace("..", "_").strip()
-    return name[:255] or "unknown"

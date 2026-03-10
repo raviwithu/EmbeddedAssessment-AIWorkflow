@@ -61,8 +61,9 @@
 <h2>Hardening Checks ({{ r.hardening | length }})</h2>
 <table>
   <tr><th>ID</th><th>Category</th><th>Description</th><th>Status</th><th>Detail</th></tr>
+  {% set safe_statuses = {'pass': 'pass', 'fail': 'fail', 'warn': 'warn', 'info': 'info'} %}
   {% for h in r.hardening %}
-  <tr><td>{{ h.check_id }}</td><td>{{ h.category }}</td><td>{{ h.description }}</td><td class="{{ h.status }}">{{ h.status | upper }}</td><td>{{ h.detail }}</td></tr>
+  <tr><td>{{ h.check_id }}</td><td>{{ h.category }}</td><td>{{ h.description }}</td><td class="{{ safe_statuses.get(h.status, '') }}">{{ h.status | upper }}</td><td>{{ h.detail }}</td></tr>
   {% endfor %}
 </table>
 {% endif %}

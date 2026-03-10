@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collector.linux.service_process_map import (
-    _get_enabled_services,
     _get_service_pids,
-    _get_services,
     _match_ports,
     collect_service_process_map,
 )
@@ -34,46 +32,6 @@ def _setup_service_map_transport(t: MockTransport) -> None:
     t.register_substring("systemctl show", stdout=SYSTEMCTL_SHOW_OUTPUT)
     t.register("ps aux --no-headers 2>/dev/null", stdout=GNU_PS_OUTPUT)
     t.register("ss -tulnp", stdout=SS_OUTPUT)
-
-
-# ---------------------------------------------------------------------------
-# _get_services
-# ---------------------------------------------------------------------------
-
-class TestGetServices:
-    def test_parses_services(self, mock_transport: MockTransport):
-        mock_transport.register(
-            "systemctl list-units --type=service --all --no-pager --no-legend",
-            stdout=SYSTEMCTL_LIST_UNITS,
-        )
-        services = _get_services(mock_transport)
-        names = [s[0] for s in services]
-        assert "sshd" in names
-        assert "nginx" in names
-        assert "bluetooth" in names
-
-    def test_failure_returns_empty(self, mock_transport: MockTransport):
-        mock_transport.register(
-            "systemctl list-units --type=service --all --no-pager --no-legend",
-            exit_code=1,
-        )
-        assert _get_services(mock_transport) == []
-
-
-# ---------------------------------------------------------------------------
-# _get_enabled_services
-# ---------------------------------------------------------------------------
-
-class TestGetEnabledServices:
-    def test_parses_enabled(self, mock_transport: MockTransport):
-        mock_transport.register(
-            "systemctl list-unit-files --type=service --no-pager --no-legend",
-            stdout=SYSTEMCTL_LIST_UNIT_FILES,
-        )
-        enabled = _get_enabled_services(mock_transport)
-        assert "sshd" in enabled
-        assert "nginx" in enabled
-        assert "bluetooth" not in enabled
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +91,7 @@ class TestCollectServiceProcessMap:
     def test_maps_services_to_processes(self, mock_transport: MockTransport):
         _setup_service_map_transport(mock_transport)
         mappings = collect_service_process_map(mock_transport)
-        assert len(mappings) == 4  # sshd, nginx, cron, bluetooth
+        assert len(mappings) == 5  # sshd, nginx, cron, bluetooth, avahi-daemon (from unit-files)
 
         by_name = {m.service_name: m for m in mappings}
 

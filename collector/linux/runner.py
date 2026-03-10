@@ -315,7 +315,7 @@ def run_linux_assessment(
             result.hardware_interfaces = collect_hardware_interfaces(transport)
             logger.info("Found %d hardware interfaces", len(result.hardware_interfaces))
 
-    except Exception as exc:
+    except (TransportError, OSError) as exc:
         logger.exception("Assessment failed for %s", target.name)
         result.errors.append(str(exc))
     finally:

@@ -27,6 +27,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from collector.common.sanitize import sanitize_hostname as _sanitize_hostname
 from collector.common.transport import ConnectionFailed, Transport, TransportError, create_transport
 from collector.config import ConnectionConfig, load_config
 from collector.linux.baseline import collect_baseline
@@ -209,9 +210,6 @@ def _run_collector(summary: dict, name: str, fn) -> None:
         logger.error("Collector '%s' failed: %s", name, exc)
 
 
-def _sanitize_hostname(hostname: str) -> str:
-    """Sanitize hostname for use as a directory name."""
-    return hostname.replace("/", "_").replace("\\", "_").replace("..", "_").strip()
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +318,18 @@ def main(argv: list[str] | None = None) -> None:
             summary = run_full_assessment(transport, output_dir=args.output)
             all_summaries.append(summary)
             _print_summary(summary)
+        except Exception as exc:
+            msg = f"Assessment failed for {conn.host}: {exc}"
+            logger.error(msg)
+            all_summaries.append({
+                "hostname": conn.host,
+                "platform": "unknown",
+                "collectors_run": [],
+                "collectors_failed": [],
+                "artifact_counts": {},
+                "output_path": "",
+                "errors": [msg],
+            })
         finally:
             transport.close()
 

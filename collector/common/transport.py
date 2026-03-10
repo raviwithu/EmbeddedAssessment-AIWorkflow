@@ -196,8 +196,8 @@ class SSHTransport(Transport):
         if self._client:
             try:
                 self._client.close()
-            except Exception:
-                pass
+            except (OSError, paramiko.SSHException) as exc:
+                logger.warning("Error closing SSH connection: %s", exc)
             self._client = None
             logger.debug("SSH connection closed")
 

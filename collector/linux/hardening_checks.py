@@ -6,9 +6,15 @@ These checks are non-intrusive — read-only commands and file reads only.
 from __future__ import annotations
 
 import logging
+import re
 
 from collector.common.transport import Transport
 from collector.models import HardeningCheck
+
+_SAFE_SETTING = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+# SUID binaries above this count trigger a warning.
+SUID_WARN_THRESHOLD = 15
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +32,34 @@ def _check(
 
 
 def run_hardening_checks(transport: Transport) -> list[HardeningCheck]:
-    """Execute all hardening checks and return results."""
+    """Execute all hardening checks and return results.
+
+    Each check runs independently — a failure in one does not prevent the
+    others from executing.  Transport errors are caught and recorded as
+    ``warn`` results rather than propagating.
+    """
+    _ALL_CHECKS = [
+        _check_root_login,
+        _check_password_auth,
+        _check_firewall,
+        _check_selinux,
+        _check_aslr,
+        _check_core_dumps,
+        _check_suid_files,
+    ]
+
     checks: list[HardeningCheck] = []
-    checks.append(_check_root_login(transport))
-    checks.append(_check_password_auth(transport))
-    checks.append(_check_firewall(transport))
-    checks.append(_check_selinux(transport))
-    checks.append(_check_aslr(transport))
-    checks.append(_check_core_dumps(transport))
-    checks.append(_check_suid_files(transport))
+    for fn in _ALL_CHECKS:
+        try:
+            checks.append(fn(transport))
+        except Exception as exc:
+            # Derive a check_id from the function name (e.g. _check_firewall -> firewall)
+            name = fn.__name__.removeprefix("_check_")
+            logger.warning("Hardening check '%s' failed: %s", name, exc)
+            checks.append(_check(
+                f"ERR-{name}", "error", f"Check '{name}' could not run",
+                "warn", str(exc),
+            ))
     return checks
 
 
@@ -44,6 +69,8 @@ def _grep_sshd_setting(t: Transport, setting: str) -> str:
     Checks both /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/*.conf.
     Returns the last match (which is the effective value), or "NOTFOUND".
     """
+    if not _SAFE_SETTING.match(setting):
+        raise ValueError(f"Invalid sshd setting name: {setting!r}")
     cmd = (
         f"grep -hi '^{setting}' "
         "/etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf "
@@ -118,7 +145,7 @@ def _check_suid_files(t: Transport) -> HardeningCheck:
     )
     files = [f for f in r.stdout.strip().splitlines() if f]
     count = len(files)
-    if count > 15:
+    if count > SUID_WARN_THRESHOLD:
         return _check(
             "H-007", "Filesystem", "SUID binary count", "warn",
             f"{count} SUID binaries found",

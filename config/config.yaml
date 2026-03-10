@@ -14,11 +14,14 @@ targets:
       key_path: "~/.ssh/id_ed25519"
       # password: ""          # only if auth=password
       timeout_seconds: 10
+      command_timeout: 30    # per-command timeout in seconds
 
 modules:
   process_inventory:
     enabled: true
   service_port_inventory:
+    enabled: true
+  service_process_map:
     enabled: true
   hardening_checks:
     enabled: true

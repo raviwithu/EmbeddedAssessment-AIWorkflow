@@ -247,6 +247,156 @@ class TestReportRender:
 
 
 # ---------------------------------------------------------------------------
+# GET /targets
+# ---------------------------------------------------------------------------
+
+class TestListTargets:
+    async def test_returns_configured_targets(self, client: httpx.AsyncClient):
+        resp = await client.get("/targets")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        # config/config.yaml has at least one target
+        if data:
+            assert "name" in data[0]
+            assert "platform" in data[0]
+            assert "host" in data[0]
+            assert "port" in data[0]
+
+
+# ---------------------------------------------------------------------------
+# POST /assess
+# ---------------------------------------------------------------------------
+
+class TestAssess:
+    async def test_assess_all_targets(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/assess", json={})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "results" in data
+        assert "errors" in data
+
+    async def test_assess_nonexistent_target(self, client: httpx.AsyncClient):
+        resp = await client.post("/assess", json={
+            "target_name": "nonexistent-device-xyz",
+        })
+        assert resp.status_code == 404
+
+    async def test_assess_specific_target(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/assess", json={
+                "target_name": "linux-device-01",
+            })
+        # Either 200 (found) or 404 (not in config) — depends on config state
+        assert resp.status_code in (200, 404)
+
+
+# ---------------------------------------------------------------------------
+# POST /collect/linux/service-map
+# ---------------------------------------------------------------------------
+
+class TestCollectLinuxServiceMap:
+    async def test_success(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/collect/linux/service-map", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "mappings" in data
+        assert "errors" in data
+
+    async def test_missing_host_returns_422(self, client: httpx.AsyncClient):
+        resp = await client.post("/collect/linux/service-map", json={
+            "target": {},
+        })
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/baseline
+# ---------------------------------------------------------------------------
+
+class TestForensicBaseline:
+    async def test_success(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/forensic/baseline", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["phase"] == "baseline"
+        assert data["artifacts_collected"] > 0
+
+    async def test_missing_host_returns_422(self, client: httpx.AsyncClient):
+        resp = await client.post("/forensic/baseline", json={
+            "target": {},
+        })
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/phase0
+# ---------------------------------------------------------------------------
+
+class TestForensicPhase0:
+    async def test_success(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/forensic/phase0", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["phase"] == "phase0"
+        assert data["artifacts_collected"] > 0
+
+
+# ---------------------------------------------------------------------------
+# POST /forensic/phase1
+# ---------------------------------------------------------------------------
+
+class TestForensicPhase1:
+    async def test_success(self, client: httpx.AsyncClient):
+        with _patch_transport():
+            resp = await client.post("/forensic/phase1", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["phase"] == "phase1"
+
+
+# ---------------------------------------------------------------------------
+# POST /orchestrate
+# ---------------------------------------------------------------------------
+
+class TestOrchestrate:
+    async def test_success(self, client: httpx.AsyncClient):
+        mock_t = _make_mock_transport()
+        mock_t.register("uname -s", stdout="Linux\n")
+
+        with patch("collector.api.create_transport", return_value=mock_t):
+            resp = await client.post("/orchestrate", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["platform"] == "linux"
+        assert len(data["collectors_run"]) > 0
+
+    async def test_connection_failure_returns_502(self, client: httpx.AsyncClient):
+        with patch(
+            "collector.api.create_transport",
+            side_effect=lambda cfg: _raise_on_connect(),
+        ):
+            resp = await client.post("/orchestrate", json={
+                "target": {"host": "10.0.0.1"},
+            })
+        assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------------------
 # Helpers for error simulation
 # ---------------------------------------------------------------------------
 

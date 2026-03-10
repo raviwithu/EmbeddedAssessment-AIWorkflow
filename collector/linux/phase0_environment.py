@@ -77,7 +77,7 @@ _PHASE0_COMMANDS: list[tuple[str, str]] = [
     ("iptables_rules.txt", "iptables -L -n -v 2>/dev/null || echo 'iptables not available'"),
     ("crontabs.txt",
      "for u in $(cut -d: -f1 /etc/passwd 2>/dev/null); do "
-     "echo \"=== $u ===\"; crontab -l -u $u 2>/dev/null; done"),
+     "echo \"=== $u ===\"; crontab -l -u \"$u\" 2>/dev/null; done"),
     ("systemd_timers.txt", "systemctl list-timers --all --no-pager 2>/dev/null || echo 'not systemd'"),
     ("loginlog.txt", "last -20 2>/dev/null || echo 'last not available'"),
     ("dmesg_tail.txt", "dmesg 2>/dev/null | tail -200 || echo 'dmesg not available'"),

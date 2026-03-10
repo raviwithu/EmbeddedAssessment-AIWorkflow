@@ -7,6 +7,7 @@ All operations are read-only.
 from __future__ import annotations
 
 import logging
+import shlex
 
 from collector.common.transport import Transport
 from collector.models import HardwareInterface
@@ -29,7 +30,7 @@ def _check_readable(t: Transport, paths: list[str]) -> set[str]:
     """Return the subset of *paths* that the current user can read."""
     if not paths:
         return set()
-    tests = " && ".join(f'test -r "{p}" && echo "{p}"' for p in paths)
+    tests = " && ".join(f'test -r {shlex.quote(p)} && echo {shlex.quote(p)}' for p in paths)
     r = t.run(f"{{ {tests}; }} 2>/dev/null; true")
     return {line.strip() for line in r.stdout.strip().splitlines() if line.strip()}
 

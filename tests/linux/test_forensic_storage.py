@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from collector.linux.forensic_storage import save_snapshot, load_manifest, _sanitize
+from collector.common.sanitize import sanitize_hostname as _sanitize
+from collector.linux.forensic_storage import save_snapshot, load_manifest
 from collector.models import BaselineSnapshot, ForensicArtifact, Phase0Snapshot
 
 
@@ -89,7 +90,14 @@ class TestSanitize:
         assert _sanitize("host\\name") == "host_name"
 
     def test_removes_double_dots(self):
-        assert _sanitize("..host..") == "_host_"
+        assert _sanitize("..host..") == "host"
 
     def test_strips_whitespace(self):
         assert _sanitize("  host  ") == "host"
+
+    def test_removes_special_chars(self):
+        assert _sanitize("host*name?:test") == "host_name__test"
+
+    def test_empty_becomes_unknown(self):
+        assert _sanitize("") == "unknown"
+        assert _sanitize("...") == "unknown"

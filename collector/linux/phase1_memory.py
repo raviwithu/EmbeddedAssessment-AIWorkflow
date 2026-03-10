@@ -15,6 +15,7 @@ dump file stays on the target or a network destination.
 from __future__ import annotations
 
 import logging
+import shlex
 
 from collector.common.transport import Transport
 from collector.models import ForensicArtifact, Phase1Snapshot
@@ -40,7 +41,7 @@ def collect_phase1(
     errors: list[str] = []
 
     # Create dump directory on target
-    transport.run(f"mkdir -p {dump_path}")
+    transport.run(f"mkdir -p {shlex.quote(dump_path)}")
 
     # Record system memory size for verification
     meminfo = transport.run("cat /proc/meminfo")
@@ -60,9 +61,9 @@ def collect_phase1(
 
     # Try LiME first
     lime_check = transport.run(
-        f"ls /mnt/trusted_usb/lime-$(uname -r).ko 2>/dev/null || "
-        f"ls /tmp/lime-$(uname -r).ko 2>/dev/null || "
-        f"find / -name 'lime-*.ko' -maxdepth 3 2>/dev/null | head -1"
+        "ls /mnt/trusted_usb/lime-$(uname -r).ko 2>/dev/null || "
+        "ls /tmp/lime-$(uname -r).ko 2>/dev/null || "
+        "find / -name 'lime-*.ko' -maxdepth 3 2>/dev/null | head -1"
     )
     lime_path = lime_check.stdout.strip().splitlines()[0] if lime_check.stdout.strip() else ""
 
@@ -70,7 +71,7 @@ def collect_phase1(
         method_used = "lime"
         logger.info("Found LiME module at %s", lime_path)
         load_result = transport.run(
-            f'sudo insmod {lime_path} "path={dump_file} format=lime"',
+            f'sudo insmod {shlex.quote(lime_path)} "path={shlex.quote(dump_file)} format=lime"',
             timeout=300,
         )
         if load_result.exit_code != 0:
@@ -120,7 +121,8 @@ def collect_phase1(
 
     # Step 1.2 — Verify acquisition integrity (if dump exists)
     if method_used == "lime":
-        sha_result = transport.run(f"sha256sum {dump_file} 2>/dev/null")
+        q_dump = shlex.quote(dump_file)
+        sha_result = transport.run(f"sha256sum {q_dump} 2>/dev/null")
         if sha_result.ok and sha_result.stdout.strip():
             dump_sha256 = sha_result.stdout.strip().split()[0]
             artifacts.append(ForensicArtifact(
@@ -129,7 +131,7 @@ def collect_phase1(
                 command=f"sha256sum {dump_file}",
             ))
 
-        size_result = transport.run(f"stat -c %s {dump_file} 2>/dev/null || ls -l {dump_file}")
+        size_result = transport.run(f"stat -c %s {q_dump} 2>/dev/null || ls -l {q_dump}")
         if size_result.ok:
             try:
                 dump_size = int(size_result.stdout.strip().split()[0])

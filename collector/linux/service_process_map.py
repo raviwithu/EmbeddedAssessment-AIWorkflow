@@ -9,49 +9,47 @@ from __future__ import annotations
 
 import logging
 import re
+import shlex
 
 from collector.common.transport import Transport
 from collector.linux.process_inventory import collect_processes
-from collector.linux.service_port_inventory import collect_open_ports
-from collector.models import OpenPort, ProcessInfo, ServiceProcessMap
+from collector.linux.service_port_inventory import collect_open_ports, collect_services
+from collector.models import OpenPort, ProcessInfo, ServiceInfo, ServiceProcessMap
 
 logger = logging.getLogger(__name__)
 
 
 def collect_service_process_map(transport: Transport) -> list[ServiceProcessMap]:
     """Map systemd services to their running processes and listening ports."""
-    # 1. Gather services with runtime state
-    services = _get_services(transport)
-    if not services:
+    # 1. Reuse collect_services() for runtime state + enablement (no duplication)
+    svc_list: list[ServiceInfo] = collect_services(transport)
+    if not svc_list:
         return []
 
-    # 2. Gather enabled/disabled status
-    enabled_set = _get_enabled_services(transport)
-
-    # 3. Batch-query MainPID for all services
-    service_names = [name for name, _ in services]
+    # 2. Batch-query MainPID for all services
+    service_names = [s.name for s in svc_list]
     pid_map = _get_service_pids(transport, service_names)
 
-    # 4. Collect full process list for cross-reference
+    # 3. Collect full process list for cross-reference
     all_procs = collect_processes(transport)
     proc_by_pid: dict[int, ProcessInfo] = {p.pid: p for p in all_procs}
 
-    # 5. Collect open ports for matching
+    # 4. Collect open ports for matching
     all_ports = collect_open_ports(transport)
 
-    # 6. Build mappings
+    # 5. Build mappings
     mappings: list[ServiceProcessMap] = []
-    for name, state in services:
-        main_pid = pid_map.get(name, 0)
+    for svc in svc_list:
+        main_pid = pid_map.get(svc.name, 0)
         proc = proc_by_pid.get(main_pid) if main_pid > 0 else None
 
         # Match ports: look for ports whose process name matches the service
-        matched_ports = _match_ports(all_ports, main_pid, proc, name)
+        matched_ports = _match_ports(all_ports, main_pid, proc, svc.name)
 
         mappings.append(ServiceProcessMap(
-            service_name=name,
-            service_state=state,
-            enabled=name in enabled_set,
+            service_name=svc.name,
+            service_state=svc.state,
+            enabled=svc.enabled,
             main_pid=main_pid,
             process=proc,
             listening_ports=matched_ports,
@@ -64,42 +62,6 @@ def collect_service_process_map(transport: Transport) -> list[ServiceProcessMap]
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _get_services(transport: Transport) -> list[tuple[str, str]]:
-    """Return (name, active_state) tuples from systemctl list-units."""
-    r = transport.run(
-        "systemctl list-units --type=service --all --no-pager --no-legend"
-    )
-    if r.exit_code != 0:
-        logger.warning("systemctl list-units failed: %s", r.stderr)
-        return []
-
-    services: list[tuple[str, str]] = []
-    for line in r.stdout.strip().splitlines():
-        parts = line.split(None, 4)
-        if len(parts) < 4:
-            continue
-        name = parts[0].removesuffix(".service")
-        active = parts[2]  # active / inactive
-        services.append((name, active))
-    return services
-
-
-def _get_enabled_services(transport: Transport) -> set[str]:
-    """Return set of service names that are enabled at boot."""
-    r = transport.run(
-        "systemctl list-unit-files --type=service --no-pager --no-legend"
-    )
-    if r.exit_code != 0:
-        return set()
-
-    enabled: set[str] = set()
-    for line in r.stdout.strip().splitlines():
-        parts = line.split(None, 2)
-        if len(parts) >= 2 and parts[1] == "enabled":
-            enabled.add(parts[0].removesuffix(".service"))
-    return enabled
-
-
 def _get_service_pids(
     transport: Transport, service_names: list[str]
 ) -> dict[str, int]:
@@ -111,7 +73,7 @@ def _get_service_pids(
     if not service_names:
         return {}
 
-    svc_args = " ".join(f"{n}.service" for n in service_names)
+    svc_args = " ".join(shlex.quote(f"{n}.service") for n in service_names)
     r = transport.run(
         f"systemctl show {svc_args} --property=Id,MainPID --no-pager"
     )
@@ -133,7 +95,7 @@ def _get_service_pids(
             try:
                 pid_map[current_id] = int(line[8:])
             except ValueError:
-                pass
+                logger.debug("Non-integer MainPID for %s: %r", current_id, line[8:])
 
     return pid_map
 

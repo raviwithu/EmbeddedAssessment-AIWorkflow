@@ -25,6 +25,12 @@ def _get_html_env() -> Environment:
     return _html_env
 
 
+def _md_escape(value: object) -> str:
+    """Escape pipe characters and newlines so they don't break Markdown tables."""
+    s = str(value)
+    return s.replace("|", "\\|").replace("\n", " ")
+
+
 def _get_md_env() -> Environment:
     global _md_env
     if _md_env is None:
@@ -32,6 +38,7 @@ def _get_md_env() -> Environment:
             loader=FileSystemLoader(str(_TEMPLATE_DIR)),
             autoescape=False,
         )
+        _md_env.filters["md"] = _md_escape
     return _md_env
 
 

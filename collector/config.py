@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
+
 import yaml
 from pydantic import BaseModel, Field, SecretStr
 
@@ -12,7 +14,7 @@ class ConnectionConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 22
     username: str = "root"
-    auth: str = "key"
+    auth: Literal["key", "password"] = "key"
     key_path: str = "~/.ssh/id_ed25519"
     password: SecretStr = SecretStr("")
     timeout_seconds: int = 10
@@ -61,5 +63,8 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path) as f:
-        raw = yaml.safe_load(f)
+        try:
+            raw = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML in {config_path}: {exc}") from exc
     return AppConfig.model_validate(raw or {})

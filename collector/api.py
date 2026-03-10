@@ -69,7 +69,10 @@ from report.generator import render_html, render_markdown
 logger = logging.getLogger(__name__)
 
 # Default request timeout in seconds (overridable via REQUEST_TIMEOUT env var).
-REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
+try:
+    REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
+except ValueError:
+    REQUEST_TIMEOUT = 120
 
 # Load config from file (COLLECTOR_CONFIG env var or default path).
 _config_path = os.environ.get("COLLECTOR_CONFIG", "config/config.yaml")

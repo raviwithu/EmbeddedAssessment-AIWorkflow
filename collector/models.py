@@ -124,7 +124,12 @@ class TargetConnectionRequest(BaseModel):
                 "or the SSH_HOST env var"
             )
         if self.port == 0:
-            self.port = int(os.environ.get("SSH_PORT", "22"))
+            try:
+                self.port = int(os.environ.get("SSH_PORT", "22"))
+            except ValueError:
+                raise ValueError("SSH_PORT env var must be an integer")
+        if not (1 <= self.port <= 65535):
+            raise ValueError(f"SSH port must be 1-65535, got {self.port}")
         if not self.username:
             self.username = os.environ.get("SSH_USERNAME", "root")
         if self.auth is None:
@@ -136,9 +141,15 @@ class TargetConnectionRequest(BaseModel):
             env_pw = os.environ.get("SSH_PASSWORD", "")
             self.password = SecretStr(env_pw)
         if self.timeout_seconds == 0:
-            self.timeout_seconds = int(os.environ.get("SSH_TIMEOUT", "10"))
+            try:
+                self.timeout_seconds = int(os.environ.get("SSH_TIMEOUT", "10"))
+            except ValueError:
+                raise ValueError("SSH_TIMEOUT env var must be an integer")
         if self.command_timeout == 0:
-            self.command_timeout = int(os.environ.get("SSH_CMD_TIMEOUT", "30"))
+            try:
+                self.command_timeout = int(os.environ.get("SSH_CMD_TIMEOUT", "30"))
+            except ValueError:
+                raise ValueError("SSH_CMD_TIMEOUT env var must be an integer")
         return self
 
 

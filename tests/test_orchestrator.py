@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from collector.common.sanitize import sanitize_hostname as _sanitize_hostname
 from collector.orchestrator import (
-    _sanitize_hostname,
     build_parser,
     is_linux,
     run_full_assessment,
@@ -227,3 +227,9 @@ class TestSanitizeHostname:
 
     def test_strips_whitespace(self):
         assert _sanitize_hostname("  host  ") == "host"
+
+    def test_removes_special_chars(self):
+        assert _sanitize_hostname("host*name?:test") == "host_name__test"
+
+    def test_empty_becomes_unknown(self):
+        assert _sanitize_hostname("") == "unknown"
